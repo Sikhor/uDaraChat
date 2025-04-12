@@ -1,4 +1,7 @@
 #include "App.h"
+#include "ChatLibrary.h"
+
+
 #include <openssl/sha.h>
 #include <sstream>
 #include <iomanip>
@@ -166,15 +169,21 @@ std::string HandleTopicUnSubscription(PerSocketData *data, const std::string& ms
 }
 
 
-
-
-
+uDaraChatLibrary *chatLibrary;
 
 int main() {
 
     // this is the keyfile for later on /etc/letsencrypt/live/gameinfo.daraempire.com/privkey.pem
     /* Keep in mind that uWS::SSLApp({options}) is the same as uWS::App() when compiled without SSL support.
      * You may swap to using uWS:App() if you don't need SSL */
+    chatLibrary = new uDaraChatLibrary();
+
+    chatLibrary->SetDebugLevel(10);
+    std::cout<< "**********************Starting uDaraChatServer***********"<<std::endl;  
+    //chatLibrary->RunTests();
+    //return 0;
+
+
     uWS::SSLApp *app = new uWS::SSLApp({
         /* There are example certificates in uWebSockets.js repo */
         .key_file_name = "misc/key.pem",
@@ -215,7 +224,7 @@ int main() {
             PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
             if(DEBUGLEVEL>9){
                 std::cout << "Message Received: " << message << std::endl;
-            }       
+            }   
           
             // NEW CODE
             std::string msg = std::string(message);
@@ -229,7 +238,6 @@ int main() {
                 std::cout <<"ERROR: "<< remoteAddressIPV4<< " Client " + perSocketData->name +" not connected, ignoring message"<< std::endl;
                 return;
             }
-            // Handle subscription and unsubscription
 
             if (msg.rfind("subscribe:", 0) == 0) {
                 std::string topic= HandleTopicSubscription(perSocketData, msg);
@@ -245,6 +253,12 @@ int main() {
                 }
             }
 
+            // handle groupinvite
+            //if(msg.find(":GroupInvite:", 0) == 0) {
+            std::cout << msg << std::endl;
+                    //ChatMessage chatMsg=chatLibrary->ParseChatMessage(msg);
+                    //std::cout << "GroupInvite: " << chatMsg.sender << " Inviting " << chatMsg.receiver << " to group " << chatMsg.message << std::endl; 
+            //    }          
             // Optional: handle publishing
             if (msg.rfind("publish:", 0) == 0) {
                 auto sep = msg.find(':', 8);
