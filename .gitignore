@@ -32,11 +32,14 @@
 *.app
 
 # Testrun Stuff
-chatserver.log
-uDaraChat.code-workspace
 uDaraChatServer
-.vscode/settings.json
-build/*
+chatserver.log
+client/uDaraListener
+client/uDaraChatBot
 client/websocket.h
+build/*
+# settings for vscode and uWebSockets library
 uWebSockets/
+uDaraChat.code-workspace
+.vscode/settings.json
 .vscode/tasks.json
