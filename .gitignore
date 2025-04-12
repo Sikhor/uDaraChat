@@ -38,3 +38,5 @@ uDaraChatServer
 .vscode/settings.json
 build/*
 client/websocket.h
+uWebSockets
+uWebSockets/*
