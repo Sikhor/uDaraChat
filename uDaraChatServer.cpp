@@ -1,5 +1,6 @@
 #include "App.h"
 #include "ChatLibrary.h"
+#include "GroupContainer.h"
 
 
 #include <openssl/sha.h>
@@ -92,7 +93,7 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
 
             if (key == "name") perSocketData->name = value;
             else if (key == "zone") perSocketData->zone = value;
-            else if (key == "group") perSocketData->groupId = value;
+            // ignoring group... cannot be passed in else if (key == "group") perSocketData->groupId = value;
             else if (key == "pass") {
                 // Check if the password is correct
                 std::string hashedPassword = GenerateHashedPassword(perSocketData->name);
@@ -112,8 +113,7 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
     }
 
     std::cout << "Log: "<<ipAddress << " [Client connected] name: " << perSocketData->name
-            << ", zone: " << perSocketData->zone
-            << ", groupId: " << perSocketData->groupId << std::endl;
+            << ", zone: " << perSocketData->zone << std::endl;
 
     perSocketData->connected = true;
     return true;
@@ -168,8 +168,8 @@ std::string HandleTopicUnSubscription(PerSocketData *data, const std::string& ms
     return "";
 }
 
-
 uDaraChatLibrary *chatLibrary;
+GroupContainer *groupContainer;
 
 int main() {
 
@@ -177,11 +177,17 @@ int main() {
     /* Keep in mind that uWS::SSLApp({options}) is the same as uWS::App() when compiled without SSL support.
      * You may swap to using uWS:App() if you don't need SSL */
     chatLibrary = new uDaraChatLibrary();
+    groupContainer= new GroupContainer();
 
     chatLibrary->SetDebugLevel(10);
-    std::cout<< "**********************Starting uDaraChatServer***********"<<std::endl;  
-    //chatLibrary->RunTests();
+    groupContainer->SetDebugLevel(10);
+
+    groupContainer->RunTests();
     //return 0;
+
+
+    std::cout<< "**********************Starting uDaraChatServer***********"<<std::endl;  
+ 
 
 
     uWS::SSLApp *app = new uWS::SSLApp({
@@ -222,23 +228,32 @@ int main() {
         },
         .message = [&app](auto *ws, std::string_view message, uWS::OpCode opCode) {
             PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
-            if(DEBUGLEVEL>9){
-                std::cout << "Message Received: " << message << std::endl;
-            }   
-          
-            // NEW CODE
+            std::cout << "Message Received: " << message << std::endl;
             std::string msg = std::string(message);
-
-            std::string_view remoteAddress = ws->getRemoteAddressAsText();
-            std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
+            
+            
             if (msg.rfind("connect:", 0) == 0) {
+                // get remote address
+                std::string_view remoteAddress = ws->getRemoteAddressAsText();
+                std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
+                // handle connect
                 HandleConnect(perSocketData, msg, remoteAddressIPV4);
+                // setting groupId from group container
+                perSocketData->groupId= groupContainer->GetCurrentGroupId(perSocketData->name).groupId;
             }
             if(perSocketData->connected==false){
+                // get remote address
+                std::string_view remoteAddress = ws->getRemoteAddressAsText();
+                std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
                 std::cout <<"ERROR: "<< remoteAddressIPV4<< " Client " + perSocketData->name +" not connected, ignoring message"<< std::endl;
                 return;
             }
 
+            if (msg.rfind("schedule:", 0) == 0) {
+                groupContainer->DumpGroups();
+                std::string msg = "schedule done ";
+                ws->send(msg, opCode);
+            }
             if (msg.rfind("subscribe:", 0) == 0) {
                 std::string topic= HandleTopicSubscription(perSocketData, msg);
                 if(topic!=""){
@@ -253,12 +268,44 @@ int main() {
                 }
             }
 
-            // handle groupinvite
-            //if(msg.find(":GroupInvite:", 0) == 0) {
-            std::cout << msg << std::endl;
-                    //ChatMessage chatMsg=chatLibrary->ParseChatMessage(msg);
-                    //std::cout << "GroupInvite: " << chatMsg.sender << " Inviting " << chatMsg.receiver << " to group " << chatMsg.message << std::endl; 
-            //    }          
+            FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
+            std::cout << "Sending: " << ChatMsg.Recipient << " : " << ChatMsg.SerializeToPost() << std::endl;
+
+            if (ChatMsg.ChatType=="World") {
+                app->publish(ChatMsg.Recipient, ChatMsg.SerializeToPost(), opCode);
+                std::cout << "Sending: " << ChatMsg.Recipient << " : " << ChatMsg.SerializeToPost() << std::endl;
+                return;
+            }
+
+
+
+
+            if(ChatMsg.ChatType=="GroupInvite" && ChatMsg.Sender==perSocketData->name){
+                // Check if the sender is already in a group otherwise start one
+                if(perSocketData->groupId.empty()){
+                    std::cout << "GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
+                    GroupInfo info=groupContainer->GroupStartGroup(ChatMsg.Sender);
+                    perSocketData->groupId=info.groupId;
+                }
+                std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
+                // we let this message pass as it shall be published to the recipient
+            }
+            if(ChatMsg.ChatType=="GroupJoin"){
+                // Check if the sender is already in a group otherwise start one
+                if(perSocketData->groupId.empty()){
+                    std::cout << "Received GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
+                    GroupInfo info=groupContainer->GroupJoin(ChatMsg.Recipient, ChatMsg.Sender);
+                    perSocketData->groupId=info.groupId;
+                    std::cout << ChatMsg.Sender << "new Group is now: " << info.groupId << std::endl;
+
+                    FDaraChatMsg msg;
+                    msg.Recipient= perSocketData->groupId;
+                    app->publish(msg.Recipient, chatLibrary->GetGroupJoinMessage(msg), opCode);    
+                }
+                std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
+                // we let this message pass as it shall be published to the recipient
+            }
+
             // Optional: handle publishing
             if (msg.rfind("publish:", 0) == 0) {
                 auto sep = msg.find(':', 8);
@@ -275,9 +322,8 @@ int main() {
                 return;
             }
 
-            // OLD CODE
-            //app->publish(perSocketData->topics[(size_t)(++perSocketData->nr % 32)], message, opCode);
-            //ws->publish(perSocketData->topics[(size_t)(++perSocketData->nr % 32)], message, opCode);
+            //ChatMessage chatMsg=chatLibrary->ParseChatMessage(msg);
+            //std::cout << "GroupInvite: " << chatMsg.sender << " Inviting " << chatMsg.receiver << " to group " << chatMsg.message << std::endl; 
         },
         .drain = [](auto */*ws*/) {
             /* Check ws->getBufferedAmount() here */

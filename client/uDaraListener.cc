@@ -1,4 +1,4 @@
-#include "websocket.h"
+#include <uwebwockets/App.h
 #include "DaraLibrary.h"
 #include <iostream>
 #include <thread>
@@ -288,29 +288,36 @@ private:
   std::atomic<bool> running;
 };
 
-Client client;
 
-void my_handler(int s) {
-  client.stop();
-}
 
-int main(int argc, char** argv) {
-  struct sigaction sigIntHandler;
 
-  sigIntHandler.sa_handler = my_handler;
-  sigemptyset(&sigIntHandler.sa_mask);
-  sigIntHandler.sa_flags = 0;
+int main() {
+  // Run the WebSocket client inside a thread
+  std::thread([]() {
+      // Define WebSocket behavior
+      uWS::App().ws<false>("/*", {
+          .open = [](auto *ws) {
+              std::cout << "Connected to server!" << std::endl;
 
-  sigaction(SIGINT, &sigIntHandler, NULL);
+              // Start sending messages every 10 seconds
+              std::thread([ws]() {
+                  while (true) {
+                      std::this_thread::sleep_for(std::chrono::seconds(10));
+                      std::string message = "Hello from client!";
+                      ws->send(message, uWS::OpCode::TEXT);
+                      std::cout << "Sent: " << message << std::endl;
+                  }
+              }).detach();
+          },
+          .message = [](auto *ws, std::string_view message, uWS::OpCode opCode) {
+              std::cout << "Received: " << message << std::endl;
+          },
+          .close = [](auto *ws, int code, std::string_view message) {
+              std::cout << "Connection closed: " << message << std::endl;
+          }
+      }).connect("ws://localhost:9001", nullptr)
+        .run();  // This starts the event loop
+  }).join();
 
-  if(argc>=2 && strcmp(argv[1], "silent")==0){
-    std::cout << "Silent mode activated." << std::endl;
-    client.run(true);
-  }
-  else{
-    std::cout << "Chatty mode activated." << std::endl;
-    client.run(false);
-  }
   return 0;
 }
-

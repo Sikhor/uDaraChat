@@ -3,19 +3,37 @@
 #include <map>
 #include <iostream>
 
-struct ChatMessage {
-    std::string msgType;
-    std::string sender;
-    std::string receiver;
-    std::string message;
+#define DARACHATSERVERADDRESS "85.215.47.227:9020"
+#define DARACHATSERVERPORT 9020
+#define DARACHATSERVERIP "85.215.47.227"
+
+
+enum class EChatType {
+    GroupInvite,
+	GroupJoin,
+	GroupDisband,
+	Tell,
+	Group,
+	World,
+	Zone,
+	Raid,
+	Channel,
 };
 
-struct GroupMember
-{
-    std::string name;
-    bool isLeader=false;
-    std::string groupId;
+
+
+class FDaraChatMsg {
+public:
+    std::string ChatType;
+    std::string Sender;
+    std::string Recipient;
+    std::string Msg;
+
+
+    std::string SerializeToSend();
+    std::string SerializeToPost();
 };
+
 
 class uDaraChatLibrary
 {
@@ -23,26 +41,17 @@ class uDaraChatLibrary
         uDaraChatLibrary();
         ~uDaraChatLibrary();
 
-        std::string MyGroupPrefix="Group-";
-        int MyMaxGroupMembers=6;
         int MyDebugLevel=0;
 
-        ChatMessage ParseChatMessage(const std::string& input);
-
-        int GroupJoin(const std::string& memberName, std::string& groupId); 
-        int GroupInvite(const std::string& memberName, const std::string& groupId, const std::string& leaderName); 
-        int GroupKickMember(const std::string& leaderName, const std::string& groupId, const std::string& memberName);
-        int GroupDisband(const std::string& memberName);
-
-        int GetCurrentGroupId(const std::string& leaderName, std::string& groupId);
+        FDaraChatMsg ParseSentMessage(const std::string& input);
+        std::string GetGroupJoinMessage(FDaraChatMsg msg);
+        std::string GetGroupDisbandMessage(FDaraChatMsg msg);
+        std::string GetGroupKickMessage(FDaraChatMsg msg);
 
         std::string GetNewGroupId();
 
-        void RunTests();
         void SetDebugLevel(int level);
         void DebugMsg(std::string msg);
-        void DumpGroups();
-        int TestMsg(int msgId, std::string msg);
         void ErrorMsg(int msgId, std::string msg);
 
 protected:
@@ -50,6 +59,4 @@ protected:
 
 
 private:
-    std::vector<GroupMember> MyGroups;
-
 };
