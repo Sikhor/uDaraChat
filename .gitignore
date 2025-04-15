@@ -33,6 +33,7 @@
 
 # Testrun Stuff
 uDaraChatServer
+uDaraChatBot
 chatserver.log
 client/uDaraListener
 client/uDaraChatBot
