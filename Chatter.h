@@ -39,7 +39,9 @@ public:
     std::string GetRandomName() ;
 
     std::string GetRandomChatMsg();
-    std::string PrepareChatMsg(FDaraChatMsg ChatMsg);
+    std::string GetRandomTellMsg();
+    std::string GetRandomZoneMsg();
+    //std::string PrepareChatMsg(FDaraChatMsg ChatMsg);
 
     void SendRandomMessage();
     std::string GetRandomInvite();

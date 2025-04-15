@@ -117,6 +117,8 @@ public:
     count++;
     if(mode=="silent"){
       std::string msg= chatter.GetRandomChatMsg();
+      msg= chatter.GetRandomZoneMsg();
+      msg= chatter.GetRandomTellMsg();
       std::cout << msg <<std::endl;
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
     }

@@ -32,6 +32,7 @@ public:
 
     std::string SerializeToSend();
     std::string SerializeToPost();
+    std::string getTopic();
 };
 
 

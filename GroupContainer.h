@@ -26,7 +26,7 @@ class GroupContainer
         GroupContainer();
         ~GroupContainer();
 
-        std::string MyGroupPrefix="Group-";
+        std::string MyGroupPrefix="group_";
         int MyMaxGroupMembers=6;
         int MyDebugLevel=0;
 

@@ -144,6 +144,29 @@ std::string Chatter::GetRandomChatMsg()
   return ChatMsg.SerializeToSend();
 }
 
+std::string Chatter::GetRandomZoneMsg()
+{
+  FDaraChatMsg ChatMsg;
+  ChatMsg.ChatType= "Zone";
+  ChatMsg.Sender= MyCharName;
+  ChatMsg.Recipient= "Dungeon";
+  ChatMsg.Msg= GetRandomMessage();
+  
+  return ChatMsg.SerializeToSend();
+}
+
+std::string Chatter::GetRandomTellMsg()
+{
+  FDaraChatMsg ChatMsg;
+  ChatMsg.ChatType= "Tell";
+  ChatMsg.Sender= MyCharName;
+  ChatMsg.Recipient= "MeMercenary";
+  ChatMsg.Msg= GetRandomMessage();
+  
+  return ChatMsg.SerializeToSend();
+}
+
+
 std::string Chatter::GenerateRandomLogin()
 {
   MyCharName= GetRandomName();

@@ -76,6 +76,23 @@ std::string FDaraChatMsg::SerializeToPost()
     return serialized;
 }
 
+std::string FDaraChatMsg::getTopic()
+{
+    if(ChatType=="Tell"){
+        std::string topic = "tell_" + Recipient;
+        return topic;
+    }
+    if(ChatType=="Zone"){
+        std::string topic = "zone_" + Recipient;
+        return topic;
+    }
+    if(ChatType=="Group"){
+        std::string topic = "group_";
+        return topic;
+    }
+    return ChatType;
+}
+
 uDaraChatLibrary::uDaraChatLibrary() {}
 
 uDaraChatLibrary::~uDaraChatLibrary() {}

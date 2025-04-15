@@ -14,6 +14,10 @@
    
 #define DEBUGLEVEL 1
 
+uDaraChatLibrary *chatLibrary;
+GroupContainer *groupContainer;
+
+
 struct us_listen_socket_t *global_listen_socket;
 
 struct TopicSlot{
@@ -120,32 +124,6 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
 }
 
 
-
-std::string HandleTopicSubscription(PerSocketData *data, const std::string& msg) {
-    const std::string prefix = "subscribe:";
-    if (msg.rfind(prefix, 0) != 0) return "";
-
-    std::string newTopic = msg.substr(prefix.length());
-    
-    // Try to find an unused topic slot
-    for (size_t i = 0; i < data->topics.size(); ++i) {
-        TopicSlot& slot = data->topics[i];
-
-        if (!slot.used) {
-            slot.topic = newTopic;
-            slot.used = true;
-
-            data->topics[i].topic= newTopic;
-            data->topics[i].used= true;
-            std::cout << data->name << " Subscribed to new topic in slot " << i << ": " << newTopic << std::endl;
-            return slot.topic;
-        }
-    }
-
-    std::cout << "No available topic slots to subscribe to: " << newTopic << std::endl;
-    return "";
-}
-
 std::string HandleTopicUnSubscription(PerSocketData *data, const std::string& msg) {
     const std::string prefix = "unsubscribe:";
     if (msg.rfind(prefix, 0) != 0) return "";
@@ -168,8 +146,90 @@ std::string HandleTopicUnSubscription(PerSocketData *data, const std::string& ms
     return "";
 }
 
-uDaraChatLibrary *chatLibrary;
-GroupContainer *groupContainer;
+
+bool StoreTopicSubscription(PerSocketData *data, const std::string& newTopic) 
+{
+    for (size_t i = 0; i < data->topics.size(); ++i) {
+        TopicSlot& slot = data->topics[i];
+
+        if (!slot.used) {
+            slot.topic = newTopic;
+            slot.used = true;
+
+            data->topics[i].topic= newTopic;
+            data->topics[i].used= true;
+            std::cout << data->name << " Subscribed to new topic in slot " << i << ": " << newTopic << std::endl;
+            return true;
+        }
+        if(slot.topic == newTopic && slot.used==true) {
+            std::cout << data->name << " Already Subscribed to topic in slot " << i << ": " << newTopic << std::endl;
+            return true;
+        }
+    }
+    std::cout << "No available topic slots to subscribe to: " << newTopic << std::endl;
+    return false;
+}
+
+bool CheckValidTopicName(const std::string& topicName) {
+    // tell channels are only for direct tells. Therefore they are forbidden
+    if (topicName.rfind("tell_", 0) == 0) {
+        std::cout << "Invalid topic reserved for a private tell channel: " << topicName << std::endl;
+        return false;
+    }
+    // zone channels are only for the zone server. Therefore they are forbidden
+    if (topicName.rfind("zone_", 0) == 0) {
+        std::cout << "Invalid topic reserved for a zone channel: " << topicName << std::endl;
+        return false;
+    }
+    // Check if the topic name is valid (e.g., not empty, no special characters)
+    if (topicName.empty() || topicName.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != std::string::npos) {
+        return false;
+    }
+    return true;
+}
+
+void HandleSubscribeMessage(uWS::WebSocket<true, true, PerSocketData>* ws, std::string msg) {
+    PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
+
+    const std::string prefix = "subscribe:";
+    if (msg.rfind(prefix, 0) != 0) return;
+    std::string newTopic = msg.substr(prefix.length());
+    if(!CheckValidTopicName(newTopic)){
+        std::cout << "Invalid topic name: " << newTopic << std::endl;
+        return;
+    }
+
+    if(StoreTopicSubscription(perSocketData, newTopic) == false){
+        std::cout <<"CharName: "<< perSocketData->name<< " No available topic slots to subscribe to: " << newTopic << std::endl;
+        return;
+    }
+    ws->subscribe(newTopic);
+}
+
+void SubscribeStandardTopics(uWS::WebSocket<true, true, PerSocketData>* ws)
+{
+    PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
+    std::string topic;
+
+    topic = "World";
+    if(StoreTopicSubscription(perSocketData, topic) == true){
+        ws->subscribe(topic);
+        std::cout << "Subscribed to standard topic: " << topic << std::endl;
+    }
+    topic = "zone_"+perSocketData->zone;
+    if(StoreTopicSubscription(perSocketData, topic) == true){
+        ws->subscribe(topic);
+        std::cout << "Subscribed to standard topic: " << topic << std::endl;
+    }
+    topic = "tell_"+perSocketData->name;
+    if(StoreTopicSubscription(perSocketData, topic) == true){
+        ws->subscribe(topic);
+        std::cout << "Subscribed to standard topic: " << topic << std::endl;
+    }
+
+}
+
+
 
 int main() {
 
@@ -237,9 +297,11 @@ int main() {
                 std::string_view remoteAddress = ws->getRemoteAddressAsText();
                 std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
                 // handle connect
-                HandleConnect(perSocketData, msg, remoteAddressIPV4);
-                // setting groupId from group container
-                perSocketData->groupId= groupContainer->GetCurrentGroupId(perSocketData->name).groupId;
+                if(HandleConnect(perSocketData, msg, remoteAddressIPV4)){
+                    // setting groupId from group container
+                    perSocketData->groupId= groupContainer->GetCurrentGroupId(perSocketData->name).groupId;
+                    SubscribeStandardTopics(ws);
+                }
             }
             if(perSocketData->connected==false){
                 // get remote address
@@ -255,10 +317,8 @@ int main() {
                 ws->send(msg, opCode);
             }
             if (msg.rfind("subscribe:", 0) == 0) {
-                std::string topic= HandleTopicSubscription(perSocketData, msg);
-                if(topic!=""){
-                    ws->subscribe(topic);
-                }
+                HandleSubscribeMessage(ws, msg); 
+                return;
             }
 
             if (msg.rfind("unsubscribe:", 0) == 0) {
@@ -269,14 +329,31 @@ int main() {
             }
 
             FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
-            std::cout << "Sending: " << ChatMsg.Recipient << " : " << ChatMsg.SerializeToPost() << std::endl;
+            std::cout << "UnchangedPost: " << ChatMsg.ChatType<<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
 
             if (ChatMsg.ChatType=="World") {
-                app->publish(ChatMsg.Recipient, ChatMsg.SerializeToPost(), opCode);
+                app->publish("World", ChatMsg.SerializeToPost(), opCode);
+                std::cout << "Sending: " << "World : " << ChatMsg.SerializeToPost() << std::endl;
+                return;
+            }
+            if (ChatMsg.ChatType=="Zone") {
+                std::string topic=ChatMsg.getTopic(); 
+                app->publish(topic,ChatMsg.SerializeToPost(), opCode);
                 std::cout << "Sending: " << ChatMsg.Recipient << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
-
+            if (ChatMsg.ChatType=="Group") {
+                std::string topic=ChatMsg.getTopic()+perSocketData->groupId;
+                app->publish(topic, ChatMsg.SerializeToPost(), opCode);
+                std::cout << "Sending: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                return;
+            }
+            if (ChatMsg.ChatType=="Tell") {
+                std::string topic=ChatMsg.getTopic();
+                app->publish(topic, ChatMsg.SerializeToPost(), opCode);
+                std::cout << "Sending: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                return;
+            }
 
 
 
