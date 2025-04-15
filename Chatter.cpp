@@ -92,7 +92,7 @@ std::string GenerateHashedPassword(const std::string& passphrase)
 
 std::string Chatter::GetRandomMessage(const std::vector<std::string>& messages) {
     if (messages.empty()) {
-        throw std::runtime_error("Message list is empty");
+        return("empty");
     }
 
     // Static: initialized once, reused on every call
@@ -111,6 +111,22 @@ Chatter::Chatter()
   MyZoneName= "Dungeon";
   MyGroupId= "";
   MyPass= GenerateHashedPassword(MyCharName);
+}
+
+void Chatter::SetCharName(std::string name)
+{
+  MyCharName= name;
+  MyPass= GenerateHashedPassword(MyCharName);
+}
+
+void Chatter::AddChatPartner(std::string name)
+{
+  MyChatPartners.push_back(name);
+}
+
+std::string Chatter::GetRandomChatPartner() 
+{
+    return GetRandomMessage(MyChatPartners);
 }
 
 std::string Chatter::GetConnectionString()
@@ -160,7 +176,7 @@ std::string Chatter::GetRandomTellMsg()
   FDaraChatMsg ChatMsg;
   ChatMsg.ChatType= "Tell";
   ChatMsg.Sender= MyCharName;
-  ChatMsg.Recipient= "MeMercenary";
+  ChatMsg.Recipient= GetRandomChatPartner();
   ChatMsg.Msg= GetRandomMessage();
   
   return ChatMsg.SerializeToSend();

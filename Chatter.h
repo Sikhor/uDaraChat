@@ -28,7 +28,11 @@ public:
     std::string MyZoneName;
     int DebugLevel=0;
 
+
     Chatter();
+
+    void SetCharName(std::string name);
+    void AddChatPartner(std::string name);
     std::string GetConnectionString();
     std::string GetSubscribeString1();
     std::string GetSubscribeString2();
@@ -37,6 +41,8 @@ public:
     std::string GetRandomMessage(const std::vector<std::string>& messages);
     std::string GetRandomMessage();
     std::string GetRandomName() ;
+    std::string GetRandomChatPartner() ;
+
 
     std::string GetRandomChatMsg();
     std::string GetRandomTellMsg();
@@ -51,4 +57,5 @@ public:
 
     std::string GenerateRandomLogin();
 private:
+    std::vector<std::string> MyChatPartners;
 };

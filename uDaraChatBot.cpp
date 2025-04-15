@@ -28,7 +28,7 @@ public:
 
 
 
-  void run(std::string mode) {
+  void run(std::string mode, std::string GivenName, std::string Recipient) {
     if (!wsclient.wsConnect(3000, DARACHATSERVERIP, DARACHATSERVERPORT, "/", DARACHATSERVERADDRESS)) {
       std::cout << "wsclient connect failed: " << wsclient.getLastError() << std::endl;
       return;
@@ -51,6 +51,17 @@ public:
     std::cout << "Client running..." << std::endl;
     std::string line;
 
+    if(GivenName.empty()){
+      GivenName= chatter.GenerateRandomLogin();
+    }else{
+      chatter.SetCharName(GivenName);
+    } 
+    if(Recipient.empty()){
+      chatter.AddChatPartner(chatter.GetRandomName());
+    }else{
+      chatter.AddChatPartner(Recipient);
+    }
+    
     // Login 
     std::string msg= chatter.GetConnectionString();
     wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
@@ -161,7 +172,7 @@ int main(int argc, char** argv) {
   /* Parsing */
   if(argc<2){
     std::cout << "Help:" << std::endl;
-    std::cout << "uDaraChatBot --mode <mode>" << std::endl;
+    std::cout << "uDaraChatBot --mode <mode> --name <name>" << std::endl;
     std::cout << "   available modes:" << std::endl;
     std::cout << "   1.) silent - not output just in error case" << std::endl;
     std::cout << "   2.) world - random Messages to world" << std::endl;
@@ -171,24 +182,34 @@ int main(int argc, char** argv) {
 
   
   // Example: check for a --name argument
+  std::string mode;
   std::string name;
+  std::string recipient;
   for (int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
       if (arg == "--mode" && i + 1 < argc) {
-          name = argv[i + 1];
+          mode = argv[i + 1];
           ++i; // skip the next argument, already used as name
       }
-  }
+      if (arg == "--name" && i + 1 < argc) {
+        name = argv[i + 1];
+        ++i; // skip the next argument, already used as name
+      }
+      if (arg == "--recipient" && i + 1 < argc) {
+        recipient = argv[i + 1];
+        ++i; // skip the next argument, already used as name
+      }
+}
 
-  if (!name.empty()) {
-      std::cout << "Starting with mode " << name << "!" << std::endl;
+  if (!mode.empty()) {
+      std::cout << "Starting with mode " << name << "!" << "Name: " << name << std::endl;
   } else {
-      std::cout << "Starting with standard mode" << std::endl;
+      std::cout << "Starting with standard mode." << "Name: " << name << std::endl;
   }
     
 
 
-  std::cout << name<< " mode activated." << std::endl;
-  client.run(name);
+  std::cout << mode<< " mode activated." << std::endl;
+  client.run(mode, name, recipient);
   return 0;
 }
