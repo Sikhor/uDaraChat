@@ -311,8 +311,8 @@ void GroupContainer::DebugMsg(std::string msg)
 
 void GroupContainer::RunTests()
 {
-    GroupStartGroup("MeMercenary");
-    GroupJoin("Tirio", "MeMercenary");
+    GroupStartGroup("Tirio");
+    GroupJoin("Trula", "Tirio");
 
     
     RunGroupTests();

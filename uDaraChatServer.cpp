@@ -123,27 +123,59 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
     return true;
 }
 
+bool DumpTopicSubscription(PerSocketData *data) 
+{
+    std::cout << "Dumping topic subscriptions for: " << data->name << std::endl;
+    for (size_t i = 0; i < data->topics.size(); ++i) {
+        TopicSlot& slot = data->topics[i];
+        if (slot.used) {
+            std::cout << "Topic slot " << i << ": " << slot.topic << std::endl;
+        }
+    }
+    return true;
+}
 
-std::string HandleTopicUnSubscription(PerSocketData *data, const std::string& msg) {
-    const std::string prefix = "unsubscribe:";
-    if (msg.rfind(prefix, 0) != 0) return "";
 
-    std::string newTopic = msg.substr(prefix.length());
-    
-    // Try to find the topic slot if its already subscribed
+
+bool RemoveGroupSubscription(uWS::WebSocket<true, true, PerSocketData>* ws) 
+{
+    PerSocketData *data = (PerSocketData *) ws->getUserData();
+    if(data->groupId.empty()){
+        std::cout << "No groupId set, so no need to unsubscribe" << std::endl;
+        return false;
+    }
+    std::string oldGroupTopic;
     for (size_t i = 0; i < data->topics.size(); ++i) {
         TopicSlot& slot = data->topics[i];
 
-        if (slot.topic == newTopic && slot.used==true) {
-            data->topics[i].used = false;
-
-            std::cout << data->name << " UnSubscribed to topic in slot " << i << ": " << newTopic << std::endl;
-            return slot.topic;
+        if (slot.used && slot.topic.rfind("group_", 0) == 0) {
+            oldGroupTopic = slot.topic;
+            data->topics[i].topic= "none";
+            data->topics[i].used= false;
+            std::cout << data->name << " Removed group topic in slot " << i << ": " << oldGroupTopic << std::endl;
+            ws->unsubscribe(oldGroupTopic);
+            return true;
         }
     }
+    std::cout << "Old group topic slot not found so no need to unsusbcribe" << std::endl;
+    return false;
+}
 
-    std::cout << "No available topic slots to subscribe to: " << newTopic << std::endl;
-    return "";
+bool RemoveTopicSubscription(uWS::WebSocket<true, true, PerSocketData>* ws,PerSocketData *data, const std::string& oldTopic) 
+{
+    for (size_t i = 0; i < data->topics.size(); ++i) {
+        TopicSlot& slot = data->topics[i];
+
+        if (slot.used && slot.topic == oldTopic) {
+            data->topics[i].topic= "none";
+            data->topics[i].used= false;
+            std::cout << data->name << " Removed topic in slot " << i << ": " << oldTopic << std::endl;
+            ws->unsubscribe(oldTopic);
+            return true;
+        }
+    }
+    std::cout << "Old topic slot not found so no need to unsusbcribe: " << oldTopic << std::endl;
+    return false;
 }
 
 
@@ -206,6 +238,24 @@ void HandleSubscribeMessage(uWS::WebSocket<true, true, PerSocketData>* ws, std::
     ws->subscribe(newTopic);
 }
 
+
+void SubscribeGroupTopic(uWS::WebSocket<true, true, PerSocketData>* ws)
+{
+    PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
+    std::string topic;
+
+    if(perSocketData->groupId.empty()){
+        std::cout << "No groupId set, so no need to subscribe" << std::endl;
+        return;
+    }
+
+    topic = "group_"+perSocketData->groupId;
+    if(StoreTopicSubscription(perSocketData, topic) == true){
+        ws->subscribe(topic);
+        std::cout << "Subscribed to standard topic: " << topic << std::endl;
+    }
+
+}
 void SubscribeStandardTopics(uWS::WebSocket<true, true, PerSocketData>* ws)
 {
     PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
@@ -226,7 +276,7 @@ void SubscribeStandardTopics(uWS::WebSocket<true, true, PerSocketData>* ws)
         ws->subscribe(topic);
         std::cout << "Subscribed to standard topic: " << topic << std::endl;
     }
-
+    SubscribeGroupTopic(ws);
 }
 
 
@@ -300,6 +350,7 @@ int main() {
                 if(HandleConnect(perSocketData, msg, remoteAddressIPV4)){
                     // setting groupId from group container
                     perSocketData->groupId= groupContainer->GetCurrentGroupId(perSocketData->name).groupId;
+                    std::cout << "Log: "<< remoteAddressIPV4 << " Client " + perSocketData->name + " connected with groupid:"<< perSocketData->groupId << std::endl;
                     SubscribeStandardTopics(ws);
                 }
             }
@@ -317,15 +368,15 @@ int main() {
                 ws->send(msg, opCode);
             }
             if (msg.rfind("subscribe:", 0) == 0) {
-                HandleSubscribeMessage(ws, msg); 
+                HandleSubscribeMessage(ws, msg.substr(10)); 
+                DumpTopicSubscription(perSocketData);
                 return;
             }
 
             if (msg.rfind("unsubscribe:", 0) == 0) {
-                std::string topic= HandleTopicUnSubscription(perSocketData, msg);
-                if(topic!=""){
-                    ws->unsubscribe(topic);
-                }
+                RemoveTopicSubscription(ws, perSocketData, msg.substr(12));
+                DumpTopicSubscription(perSocketData);
+                return;
             }
 
             FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
@@ -339,7 +390,7 @@ int main() {
             if (ChatMsg.ChatType=="Zone") {
                 std::string topic=ChatMsg.getTopic(); 
                 app->publish(topic,ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending: " << ChatMsg.Recipient << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::cout << "Sending: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
             if (ChatMsg.ChatType=="Group") {
@@ -362,7 +413,10 @@ int main() {
                 if(perSocketData->groupId.empty()){
                     std::cout << "GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
                     GroupInfo info=groupContainer->GroupStartGroup(ChatMsg.Sender);
+
                     perSocketData->groupId=info.groupId;
+                    SubscribeGroupTopic(ws);
+                    DumpTopicSubscription(perSocketData);
                 }
                 std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
                 // we let this message pass as it shall be published to the recipient
@@ -371,16 +425,39 @@ int main() {
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
                     std::cout << "Received GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
-                    GroupInfo info=groupContainer->GroupJoin(ChatMsg.Recipient, ChatMsg.Sender);
+                    GroupInfo info=groupContainer->GroupJoin(ChatMsg.Sender, ChatMsg.Recipient);
+                    
+                    // New Group
+                    RemoveGroupSubscription(ws);
                     perSocketData->groupId=info.groupId;
-                    std::cout << ChatMsg.Sender << "new Group is now: " << info.groupId << std::endl;
+                    SubscribeGroupTopic(ws);
+                    DumpTopicSubscription(perSocketData);
+
+                    std::cout << ChatMsg.Sender << " new Group is now: " << info.groupId << std::endl;
 
                     FDaraChatMsg msg;
                     msg.Recipient= perSocketData->groupId;
                     app->publish(msg.Recipient, chatLibrary->GetGroupJoinMessage(msg), opCode);    
+
+                }else{
+                    std::cout << "GroupJoin: " << ChatMsg.Sender << " cannot join as in group:  " <<  perSocketData->groupId << std::endl;
                 }
-                std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
-                // we let this message pass as it shall be published to the recipient
+                // shall we let this message pass as it shall be published to the recipient?
+                return;
+            }
+            if(ChatMsg.ChatType=="GroupDisband" && ChatMsg.Sender==perSocketData->name){
+                // Check if the sender is already in a group otherwise start one
+                if(!perSocketData->groupId.empty()){
+                    std::cout << "GroupDisband: " << ChatMsg.Sender << " former groupId: " << perSocketData->groupId<< std::endl;
+                    GroupInfo info=groupContainer->GroupDisband(ChatMsg.Sender);
+                    // disband from old group if not empty
+                    RemoveGroupSubscription(ws);
+                    perSocketData->groupId="";
+                    DumpTopicSubscription(perSocketData);
+                }else{
+                    std::cout << "Received GroupDisband with no group ! " << ChatMsg.Sender << std::endl;
+                }
+                return;
             }
 
             // Optional: handle publishing

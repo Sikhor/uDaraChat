@@ -47,11 +47,13 @@ public:
     std::string GetRandomChatMsg();
     std::string GetRandomTellMsg();
     std::string GetRandomZoneMsg();
+    std::string GetRandomGroupMsg();
     //std::string PrepareChatMsg(FDaraChatMsg ChatMsg);
 
     void SendRandomMessage();
     std::string GetRandomInvite();
-    void SendZoneMessage();
+    void SendRandomZoneMessage();
+    void SendZoneMessage(std::string msg);
     void SendTellMessage();
 
 

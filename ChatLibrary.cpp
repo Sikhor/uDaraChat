@@ -152,6 +152,38 @@ void uDaraChatLibrary::ErrorMsg(int code, std::string msg)
     std::cout << "Error: " << code << " "<<msg << std::endl;
 }
 
+FDaraChatMsg uDaraChatLibrary::ParseReceivedMessage(const std::string& input)
+{
+    std::stringstream ss(input);
+    std::string segment;
+    std::vector<std::string> parts;
+
+    while (std::getline(ss, segment, ':')) {
+        parts.push_back(segment);
+    }
+
+    if (parts.size() < 2 ) {
+        FDaraChatMsg emptyMsg;
+        return emptyMsg; // Invalid message format      
+    }
+
+    FDaraChatMsg msg;
+    msg.ChatType = parts[0];
+    msg.Sender = parts[1];
+    msg.Recipient= "";// its always me as I received it
+
+    if(parts.size() < 3)    {
+        msg.Msg = ""; // No message content
+        return msg;
+    } 
+    // Join the remaining parts for the full message (in case message contains colons)
+    msg.Msg = parts[2];
+    for (size_t i = 3; i < parts.size(); ++i) {
+        msg.Msg += ":" + parts[i];
+    }
+
+    return msg;
+}
 
 
 FDaraChatMsg uDaraChatLibrary::ParseSentMessage(const std::string& input)

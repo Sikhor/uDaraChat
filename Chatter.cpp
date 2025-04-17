@@ -131,7 +131,7 @@ std::string Chatter::GetRandomChatPartner()
 
 std::string Chatter::GetConnectionString()
 {  std::string line;
-  return "connect:name="+MyCharName+ ";zone=Alpha;group=7;pass="+MyPass;
+  return "connect:name="+MyCharName+ ";zone=Dungeon;group=7;pass="+MyPass;
 }
 
 std::string Chatter::GetSubscribeString1()
@@ -182,6 +182,17 @@ std::string Chatter::GetRandomTellMsg()
   return ChatMsg.SerializeToSend();
 }
 
+std::string Chatter::GetRandomGroupMsg()
+{
+  FDaraChatMsg ChatMsg;
+  ChatMsg.ChatType= "Group";
+  ChatMsg.Sender= MyCharName;
+  ChatMsg.Recipient= "Group";
+  ChatMsg.Msg= GetRandomMessage();
+  
+  return ChatMsg.SerializeToSend();
+}
+
 
 std::string Chatter::GenerateRandomLogin()
 {
@@ -207,13 +218,19 @@ std::string Chatter::GetRandomInvite()
     FDaraChatMsg ChatMsg;
     ChatMsg.ChatType= "GroupInvite";
     ChatMsg.Sender= MyCharName;
-    ChatMsg.Recipient= "MeMercenary";
+    ChatMsg.Recipient= GetRandomChatPartner();
     ChatMsg.Msg= "";
 
     return ChatMsg.SerializeToSend();
 }
 
-void Chatter::SendZoneMessage()
+void Chatter::SendRandomZoneMessage()
+{
+  SendZoneMessage(GetRandomZoneMsg());
+}
+
+
+void Chatter::SendZoneMessage(std::string msg)
 {
   static int count=0;
 
@@ -226,7 +243,7 @@ void Chatter::SendZoneMessage()
     ChatMsg.ChatType= "Zone";
     ChatMsg.Sender= MyCharName;
     ChatMsg.Recipient= MyZoneName;
-    ChatMsg.Msg= "Talking to Zone: "+GetRandomMessage();
+    ChatMsg.Msg= msg;
   } 
   return;
 }

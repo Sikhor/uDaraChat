@@ -45,6 +45,7 @@ class uDaraChatLibrary
         int MyDebugLevel=0;
 
         FDaraChatMsg ParseSentMessage(const std::string& input);
+        FDaraChatMsg ParseReceivedMessage(const std::string& input);
         std::string GetGroupJoinMessage(FDaraChatMsg msg);
         std::string GetGroupDisbandMessage(FDaraChatMsg msg);
         std::string GetGroupKickMessage(FDaraChatMsg msg);
