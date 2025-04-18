@@ -7,6 +7,8 @@
 #define DARACHATSERVERPORT 9020
 #define DARACHATSERVERIP "85.215.47.227"
 
+std::string ToLower(const std::string& input);
+
 
 enum class EChatType {
     GroupInvite,

@@ -158,7 +158,7 @@ public:
         replyMsg.ChatType= "Tell";
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "Hello back!";
+        replyMsg.Msg= "Hello my friend! Good to hear from you!";
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());

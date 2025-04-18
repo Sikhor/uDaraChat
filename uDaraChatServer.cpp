@@ -103,6 +103,7 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
                 std::string hashedPassword = GenerateHashedPassword(perSocketData->name);
                 if (hashedPassword == value) { // Replace with your expected hashed password
                     perSocketData->connected = true;
+                    perSocketData->name = ToLower(perSocketData->name);
                 } else {
                     std::cout << "ERROR: "<<ipAddress << "Invalid password for user: " << perSocketData->name << std::endl;
                     perSocketData->connected = false;

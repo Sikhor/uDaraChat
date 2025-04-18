@@ -19,6 +19,14 @@
 
 
 
+std::string ToLower(const std::string& input) {
+    std::string result = input;
+    std::transform(result.begin(), result.end(), result.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return result;
+}
+
+
 
 inline std::string ChatTypeToString(EChatType type) {
     switch (type) {
@@ -79,7 +87,7 @@ std::string FDaraChatMsg::SerializeToPost()
 std::string FDaraChatMsg::getTopic()
 {
     if(ChatType=="Tell"){
-        std::string topic = "tell_" + Recipient;
+        std::string topic = "tell_" + ToLower(Recipient);
         return topic;
     }
     if(ChatType=="Zone"){
