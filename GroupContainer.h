@@ -2,6 +2,7 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <ctime>
 
 
 struct GroupMember
@@ -10,6 +11,14 @@ struct GroupMember
     bool isLeader=false;
     std::string groupId;
 };
+
+struct GroupInviteData
+{
+    std::string leaderName;
+    std::string memberName;
+    std::time_t storeTime; 
+};
+
 
 struct GroupInfo  
 {
@@ -50,10 +59,18 @@ class GroupContainer
         int TestMsg(int msgId, std::string msg);
         void ErrorMsg(int msgId, std::string msg);
 
+        std::string GetGroupTopic(std::string groupId);
+
+        void RemoveOldInvites();
+        void AddInvite(std::string leaderName, std::string memberName);
+        void RemoveInvite(std::string leaderName, std::string memberName);
+        bool CheckHasInvited(std::string leaderName, std::string memberName);
+
 protected:
 
 
 
 private:
     std::vector<GroupMember> MyGroups;
+    std::vector<GroupInviteData> MyInvites;
 };

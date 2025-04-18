@@ -529,3 +529,58 @@ void GroupContainer::RunGroupKickTests() {
     DumpGroups();
     return;
 }
+
+
+
+void GroupContainer::RemoveOldInvites() 
+{
+    int maxAgeSeconds= 180; // 3 minutes
+    
+    std::time_t now = std::time(nullptr);
+
+    MyInvites.erase(std::remove_if(MyInvites.begin(), MyInvites.end(),
+        [now, maxAgeSeconds](const GroupInviteData& entry) {
+            return (now - entry.storeTime) > maxAgeSeconds;
+        }), MyInvites.end());
+}
+
+void GroupContainer::RemoveInvite(std::string leaderName, std::string memberName)
+{
+    MyInvites.erase(
+        std::remove_if(MyInvites.begin(), MyInvites.end(),
+            [&](const GroupInviteData& invite)
+            {
+                return invite.leaderName == leaderName && invite.memberName == memberName;
+            }),
+        MyInvites.end()
+    );
+}
+
+bool GroupContainer::CheckHasInvited(std::string leaderName, std::string memberName)
+{
+    for (const GroupInviteData& invite : MyInvites)
+    {
+        if (invite.leaderName == leaderName && invite.memberName == memberName)
+        {
+            return true;
+        }
+    }
+    return false;
+}   
+
+void GroupContainer::AddInvite(std::string leaderName, std::string memberName)
+{
+    GroupInviteData invite;
+    invite.leaderName = leaderName;
+    invite.memberName = memberName;
+    invite.storeTime = std::time(nullptr);
+    MyInvites.push_back(invite);
+}
+
+
+std::string GroupContainer::GetGroupTopic(std::string groupId)
+{
+    std::string topic= "group_";
+    topic+= groupId;
+    return topic;   
+}

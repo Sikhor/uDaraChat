@@ -14,6 +14,7 @@ enum class EChatType {
     GroupInvite,
 	GroupJoin,
 	GroupDisband,
+	GroupInfo,
 	Tell,
 	Group,
 	World,
@@ -34,7 +35,7 @@ public:
 
     std::string SerializeToSend();
     std::string SerializeToPost();
-    std::string getTopic();
+    std::string getTopicPrefix();
 };
 
 
@@ -48,9 +49,9 @@ class uDaraChatLibrary
 
         FDaraChatMsg ParseSentMessage(const std::string& input);
         FDaraChatMsg ParseReceivedMessage(const std::string& input);
-        std::string GetGroupJoinMessage(FDaraChatMsg msg);
-        std::string GetGroupDisbandMessage(FDaraChatMsg msg);
-        std::string GetGroupKickMessage(FDaraChatMsg msg);
+        std::string GetGroupJoinInfoMessage(FDaraChatMsg msg);
+        std::string GetGroupDisbandInfoMessage(FDaraChatMsg msg);
+        std::string GetGroupKickInfoMessage(FDaraChatMsg msg);
 
         std::string GetNewGroupId();
 

@@ -33,6 +33,7 @@ inline std::string ChatTypeToString(EChatType type) {
         case EChatType::GroupInvite: return "GroupInvite";
         case EChatType::GroupJoin: return "GroupJoin";
         case EChatType::GroupDisband: return "GroupDisband";
+        case EChatType::GroupInfo: return "GroupInfo";
         case EChatType::Tell: return "Tell";
         case EChatType::Group: return "Group";
         case EChatType::World: return "World";
@@ -84,14 +85,14 @@ std::string FDaraChatMsg::SerializeToPost()
     return serialized;
 }
 
-std::string FDaraChatMsg::getTopic()
+std::string FDaraChatMsg::getTopicPrefix()
 {
     if(ChatType=="Tell"){
-        std::string topic = "tell_" + ToLower(Recipient);
+        std::string topic = "tell_";
         return topic;
     }
     if(ChatType=="Zone"){
-        std::string topic = "zone_" + Recipient;
+        std::string topic = "zone_";
         return topic;
     }
     if(ChatType=="Group"){
@@ -100,6 +101,7 @@ std::string FDaraChatMsg::getTopic()
     }
     return ChatType;
 }
+
 
 uDaraChatLibrary::uDaraChatLibrary() {}
 
@@ -177,7 +179,7 @@ FDaraChatMsg uDaraChatLibrary::ParseReceivedMessage(const std::string& input)
 
     FDaraChatMsg msg;
     msg.ChatType = parts[0];
-    msg.Sender = parts[1];
+    msg.Sender = ToLower(parts[1]);
     msg.Recipient= "";// its always me as I received it
 
     if(parts.size() < 3)    {
@@ -211,8 +213,8 @@ FDaraChatMsg uDaraChatLibrary::ParseSentMessage(const std::string& input)
 
     FDaraChatMsg msg;
     msg.ChatType = parts[0];
-    msg.Sender = parts[1];
-    msg.Recipient = parts[2];
+    msg.Sender = ToLower(parts[1]);
+    msg.Recipient = ToLower(parts[2]);
 
     if(parts.size() < 4)    {
         msg.Msg = ""; // No message content
@@ -230,21 +232,21 @@ FDaraChatMsg uDaraChatLibrary::ParseSentMessage(const std::string& input)
 
 
 
-std::string uDaraChatLibrary::GetGroupJoinMessage(FDaraChatMsg msg)
+std::string uDaraChatLibrary::GetGroupJoinInfoMessage(FDaraChatMsg msg)
 {
-    msg.ChatType= "GroupJoin";
-    std::string message = msg.ChatType + ":" + msg.Sender + ":" + msg.Msg;
+    msg.ChatType= "GroupJoinInfo";
+    std::string message = msg.ChatType + ":" + msg.Sender + ":joined the group";
     return message;
 }
-std::string uDaraChatLibrary::GetGroupDisbandMessage(FDaraChatMsg msg)
+std::string uDaraChatLibrary::GetGroupDisbandInfoMessage(FDaraChatMsg msg)
 {
-    msg.ChatType= "GroupDisband";
-    std::string message = msg.ChatType + ":" + msg.Sender + ":" + msg.Msg;
+    msg.ChatType= "GroupDisbandInfo";
+    std::string message = msg.ChatType + ":" + msg.Sender + ":left the group";
     return message;
 }
-std::string uDaraChatLibrary::GetGroupKickMessage(FDaraChatMsg msg)
+std::string uDaraChatLibrary::GetGroupKickInfoMessage(FDaraChatMsg msg)
 {   
-    msg.ChatType= "GroupKick";
+    msg.ChatType= "GroupKickInfo";
     std::string message = msg.ChatType + ":" + msg.Sender + ":" + msg.Msg;
     return message;
 }

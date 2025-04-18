@@ -196,6 +196,8 @@ public:
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
     }
     if(mode=="silent"){
+    }
+    if(mode=="grouptests"){
       if(count==2){
         FDaraChatMsg ChatMsg;
         ChatMsg.ChatType= "GroupDisband";
@@ -222,7 +224,7 @@ public:
       std::cout << msg << count <<std::endl;
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
     }
-    if(mode=="groupMember"){
+    if(mode=="groupmember"){
       if(count==1){
         FDaraChatMsg ChatMsg;
         ChatMsg.ChatType= "GroupDisband";
@@ -241,7 +243,7 @@ public:
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
       }
-      if(count>=5){
+      if(count==5){
         FDaraChatMsg ChatMsg;
         ChatMsg.ChatType= "Group";
         ChatMsg.Sender= chatter.MyCharName;
@@ -262,7 +264,7 @@ public:
         count=0;
       }
     }
-    if(mode=="groupLeader"){
+    if(mode=="groupleader"){
       if(count==2){
         FDaraChatMsg ChatMsg;
         ChatMsg.ChatType= "GroupInvite";
@@ -357,15 +359,25 @@ int main(int argc, char** argv) {
       }
 }
 
+  if (!mode.empty() && mode != "silent" && mode != "chatting" && mode != "inviting" && mode != "schedule" && mode != "groupmember" && mode != "groupleader" && mode != "pingpong"&& mode != "grouptests") {
+      std::cout << "Invalid mode. Available modes: silent, chatting, inviting, schedule, groupmember, groupleader, pingpong" << std::endl;
+      return 1;
+  }
   if (!mode.empty()) {
-      std::cout << "Starting with mode " << name << "!" << "Name: " << name << std::endl;
+      std::cout << "Starting with mode " << mode << "!" << std::endl;
   } else {
-      std::cout << "Starting with standard mode." << "Name: " << name << std::endl;
+      mode="silent";
+      std::cout << "Starting with standard mode: "<< mode << std::endl;
+  }
+  if(!name.empty()) {
+      std::cout << "Starting with name " << name << "!" << std::endl;
+  } else {
+      std::cout << "Starting with random name."<< std::endl;
+      name= "";
   }
     
 
 
-  std::cout << mode<< " mode activated." << std::endl;
   client.run(mode, name, recipient);
   return 0;
 }

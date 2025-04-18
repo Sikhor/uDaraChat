@@ -103,7 +103,7 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
                 std::string hashedPassword = GenerateHashedPassword(perSocketData->name);
                 if (hashedPassword == value) { // Replace with your expected hashed password
                     perSocketData->connected = true;
-                    perSocketData->name = ToLower(perSocketData->name);
+                    perSocketData->name = perSocketData->name;
                 } else {
                     std::cout << "ERROR: "<<ipAddress << "Invalid password for user: " << perSocketData->name << std::endl;
                     perSocketData->connected = false;
@@ -250,7 +250,7 @@ void SubscribeGroupTopic(uWS::WebSocket<true, true, PerSocketData>* ws)
         return;
     }
 
-    topic = "group_"+perSocketData->groupId;
+    topic = groupContainer->GetGroupTopic(perSocketData->groupId);
     if(StoreTopicSubscription(perSocketData, topic) == true){
         ws->subscribe(topic);
         std::cout << "Subscribed to standard topic: " << topic << std::endl;
@@ -272,7 +272,7 @@ void SubscribeStandardTopics(uWS::WebSocket<true, true, PerSocketData>* ws)
         ws->subscribe(topic);
         std::cout << "Subscribed to standard topic: " << topic << std::endl;
     }
-    topic = "tell_"+perSocketData->name;
+    topic = "tell_"+ToLower(perSocketData->name);
     if(StoreTopicSubscription(perSocketData, topic) == true){
         ws->subscribe(topic);
         std::cout << "Subscribed to standard topic: " << topic << std::endl;
@@ -339,7 +339,7 @@ int main() {
         },
         .message = [&app](auto *ws, std::string_view message, uWS::OpCode opCode) {
             PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
-            std::cout << "Message Received: " << message << std::endl;
+            std::cout << "*** Message Received: " << message << std::endl;
             std::string msg = std::string(message);
             
             
@@ -381,35 +381,37 @@ int main() {
             }
 
             FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
-            std::cout << "UnchangedPost: " << ChatMsg.ChatType<<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
+            std::cout << "***** Parsed ChatMsg: " << ChatMsg.ChatType<<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
 
             if (ChatMsg.ChatType=="World") {
                 app->publish("World", ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending: " << "World : " << ChatMsg.SerializeToPost() << std::endl;
+                std::cout << "Sending World: " << "World : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
             if (ChatMsg.ChatType=="Zone") {
-                std::string topic=ChatMsg.getTopic(); 
+                std::string topic=ChatMsg.getTopicPrefix()+perSocketData->zone; 
                 app->publish(topic,ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::cout << "Sending Zone: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
             if (ChatMsg.ChatType=="Group") {
-                std::string topic=ChatMsg.getTopic()+perSocketData->groupId;
+                std::string topic=ChatMsg.getTopicPrefix()+perSocketData->groupId;
                 app->publish(topic, ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::cout << "Sending Group: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
             if (ChatMsg.ChatType=="Tell") {
-                std::string topic=ChatMsg.getTopic();
+                std::string topic=ChatMsg.getTopicPrefix()+ToLower(ChatMsg.Recipient);
                 app->publish(topic, ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::cout << "Sending Tell: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
 
 
 
-            if(ChatMsg.ChatType=="GroupInvite" && ChatMsg.Sender==perSocketData->name){
+            if(ChatMsg.ChatType=="GroupInvite"){
+                std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
+                groupContainer->AddInvite(ChatMsg.Sender, ChatMsg.Recipient);
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
                     std::cout << "GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
@@ -418,15 +420,31 @@ int main() {
                     perSocketData->groupId=info.groupId;
                     SubscribeGroupTopic(ws);
                     DumpTopicSubscription(perSocketData);
-                }
-                std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
-                // we let this message pass as it shall be published to the recipient
+                } 
+                // we must forward  this message to the tell_ topic channel
+                ChatMsg.ChatType="Tell";
+                std::string telltopic=ChatMsg.getTopicPrefix()+ToLower(ChatMsg.Recipient);
+                ChatMsg.ChatType="GroupInvite";
+                app->publish(telltopic, ChatMsg.SerializeToPost(), opCode);
+                std::cout << "Sending Tell: " << telltopic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                return;
             }
             if(ChatMsg.ChatType=="GroupJoin"){
+                std::string Inviter=ChatMsg.Recipient;
+                std::string Invited=ChatMsg.Sender;
+                std::cout << "GroupJoin: " << Invited << " wants to join group of " << Inviter <<std::endl;
+                // remove outdated invites
+                groupContainer->RemoveOldInvites();
+                // did we get an invite?
+                if(groupContainer->CheckHasInvited(Inviter, Invited) == false){
+                    std::cout << "GroupJoin: " << Inviter << " has not invited " << Invited << " to a group" <<std::endl;
+                    return;
+                }
+                
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
-                    std::cout << "Received GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
-                    GroupInfo info=groupContainer->GroupJoin(ChatMsg.Sender, ChatMsg.Recipient);
+                    std::cout << "GroupJoin: Received GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
+                    GroupInfo info=groupContainer->GroupJoin(Invited, Inviter);
                     
                     // New Group
                     RemoveGroupSubscription(ws);
@@ -435,26 +453,36 @@ int main() {
                     DumpTopicSubscription(perSocketData);
 
                     std::cout << ChatMsg.Sender << " new Group is now: " << info.groupId << std::endl;
+                    groupContainer->RemoveInvite(Inviter, Invited);
 
                     FDaraChatMsg msg;
+                    msg.Sender= perSocketData->name;
                     msg.Recipient= perSocketData->groupId;
-                    app->publish(msg.Recipient, chatLibrary->GetGroupJoinMessage(msg), opCode);    
+                    std::string newGroupTopic= groupContainer->GetGroupTopic(perSocketData->groupId);
+                    app->publish(newGroupTopic, chatLibrary->GetGroupJoinInfoMessage(msg), opCode);    
 
                 }else{
-                    std::cout << "GroupJoin: " << ChatMsg.Sender << " cannot join as in group:  " <<  perSocketData->groupId << std::endl;
+                    std::cout << "GroupJoin: " << ChatMsg.Sender << " cannot join as in another group:  " <<  perSocketData->groupId << std::endl;
                 }
                 // shall we let this message pass as it shall be published to the recipient?
                 return;
             }
-            if(ChatMsg.ChatType=="GroupDisband" && ChatMsg.Sender==perSocketData->name){
+            if(ChatMsg.ChatType=="GroupDisband" && ToLower(ChatMsg.Sender)==ToLower(perSocketData->name)){
                 // Check if the sender is already in a group otherwise start one
                 if(!perSocketData->groupId.empty()){
-                    std::cout << "GroupDisband: " << ChatMsg.Sender << " former groupId: " << perSocketData->groupId<< std::endl;
-                    GroupInfo info=groupContainer->GroupDisband(ChatMsg.Sender);
                     // disband from old group if not empty
+                    std::cout << "GroupDisband: " << ChatMsg.Sender << " former groupId: " << perSocketData->groupId<< std::endl;
+                    std::string oldGroupTopic= groupContainer->GetGroupTopic(perSocketData->groupId);
+
+                    GroupInfo info=groupContainer->GroupDisband(ChatMsg.Sender);
                     RemoveGroupSubscription(ws);
                     perSocketData->groupId="";
                     DumpTopicSubscription(perSocketData);
+
+                    FDaraChatMsg msg;
+                    msg.Sender= perSocketData->name;
+                    app->publish(oldGroupTopic, chatLibrary->GetGroupDisbandInfoMessage(msg), opCode);    
+
                 }else{
                     std::cout << "Received GroupDisband with no group ! " << ChatMsg.Sender << std::endl;
                 }
