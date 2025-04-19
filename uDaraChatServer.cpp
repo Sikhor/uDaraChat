@@ -354,6 +354,7 @@ int main() {
                     std::cout << "Log: "<< remoteAddressIPV4 << " Client " + perSocketData->name + " connected with groupid:"<< perSocketData->groupId << std::endl;
                     SubscribeStandardTopics(ws);
                 }
+                return;
             }
             if(perSocketData->connected==false){
                 // get remote address
@@ -381,10 +382,10 @@ int main() {
             }
 
             FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
-            std::cout << "***** Parsed ChatMsg: " << ChatMsg.ChatType<<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
+            std::cout << "***** Parsed ChatMsg: " << ChatMsg.ChatType<<"|"<< ChatMsg.ChatCmdType <<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
 
-            if (ChatMsg.ChatType=="World") {
-                app->publish("World", ChatMsg.SerializeToPost(), opCode);
+            if (ChatMsg.ChatType=="Channel") {
+                app->publish(ChatMsg.Recipient, ChatMsg.SerializeToPost(), opCode);
                 std::cout << "Sending World: " << "World : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
@@ -408,10 +409,11 @@ int main() {
             }
 
 
-
-            if(ChatMsg.ChatType=="GroupInvite"){
-                std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
-                groupContainer->AddInvite(ChatMsg.Sender, ChatMsg.Recipient);
+            if(ChatMsg.ChatCmdType=="GroupInvite"){
+                std::string Inviter=ChatMsg.Sender;
+                std::string Invited=ChatMsg.Recipient;
+                std::cout << "GroupInvite: " << ChatMsg.Sender << " inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
+                groupContainer->AddInvite(Inviter, Invited);
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
                     std::cout << "GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
@@ -423,13 +425,14 @@ int main() {
                 } 
                 // we must forward  this message to the tell_ topic channel
                 ChatMsg.ChatType="Tell";
-                std::string telltopic=ChatMsg.getTopicPrefix()+ToLower(ChatMsg.Recipient);
-                ChatMsg.ChatType="GroupInvite";
+                std::string telltopic=ChatMsg.getTopicPrefix()+ToLower(Invited);
+                ChatMsg.ChatType="Cmd";
+                ChatMsg.ChatCmdType="GroupInvite";
                 app->publish(telltopic, ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending Tell: " << telltopic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::cout << "Sending Cmd: " << telltopic << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
-            if(ChatMsg.ChatType=="GroupJoin"){
+            if(ChatMsg.ChatCmdType=="GroupJoin"){
                 std::string Inviter=ChatMsg.Recipient;
                 std::string Invited=ChatMsg.Sender;
                 std::cout << "GroupJoin: " << Invited << " wants to join group of " << Inviter <<std::endl;
@@ -443,7 +446,7 @@ int main() {
                 
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
-                    std::cout << "GroupJoin: Received GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
+                    std::cout << "GroupJoin: Joining group. Got GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
                     GroupInfo info=groupContainer->GroupJoin(Invited, Inviter);
                     
                     // New Group
@@ -456,19 +459,20 @@ int main() {
                     groupContainer->RemoveInvite(Inviter, Invited);
 
                     FDaraChatMsg msg;
+                    msg.ChatType= "Group";
                     msg.Sender= perSocketData->name;
-                    msg.Recipient= perSocketData->groupId;
-                    std::string newGroupTopic= groupContainer->GetGroupTopic(perSocketData->groupId);
+                    std::string newGroupTopic= msg.getTopicPrefix()+perSocketData->groupId;
+                    msg.ChatType= "Cmd";
+                    msg.ChatCmdType= "GroupJoinInfo";
                     app->publish(newGroupTopic, chatLibrary->GetGroupJoinInfoMessage(msg), opCode);    
 
                 }else{
                     std::cout << "GroupJoin: " << ChatMsg.Sender << " cannot join as in another group:  " <<  perSocketData->groupId << std::endl;
                 }
-                // shall we let this message pass as it shall be published to the recipient?
+                groupContainer->DumpGroups();// shall we let this message pass as it shall be published to the recipient?
                 return;
             }
-            if(ChatMsg.ChatType=="GroupDisband" && ToLower(ChatMsg.Sender)==ToLower(perSocketData->name)){
-                // Check if the sender is already in a group otherwise start one
+            if(ChatMsg.ChatType=="GroupDisband"){
                 if(!perSocketData->groupId.empty()){
                     // disband from old group if not empty
                     std::cout << "GroupDisband: " << ChatMsg.Sender << " former groupId: " << perSocketData->groupId<< std::endl;
@@ -480,15 +484,17 @@ int main() {
                     DumpTopicSubscription(perSocketData);
 
                     FDaraChatMsg msg;
+                    msg.ChatType= "Cmd";
+                    msg.ChatCmdType= "GroupDisbandInfo";
                     msg.Sender= perSocketData->name;
                     app->publish(oldGroupTopic, chatLibrary->GetGroupDisbandInfoMessage(msg), opCode);    
-
                 }else{
                     std::cout << "Received GroupDisband with no group ! " << ChatMsg.Sender << std::endl;
                 }
                 return;
             }
 
+            std::cout << "ERROR: Why are we here? Should never come to here" << msg << std::endl;
             // Optional: handle publishing
             if (msg.rfind("publish:", 0) == 0) {
                 auto sep = msg.find(':', 8);

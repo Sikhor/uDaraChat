@@ -127,14 +127,28 @@ private:
 public:
   void ChatReply(FDaraChatMsg ChatMsg)
   {
-      if(ChatMsg.ChatType=="GroupInvite"){
+      if(ChatMsg.ChatCmdType=="GroupInvite"){
         std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " me to group " << ChatMsg.Msg << std::endl; 
         
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "GroupJoin";
+        replyMsg.ChatType= "Cmd";
+        replyMsg.ChatCmdType= "GroupJoin";
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
         replyMsg.Msg= ChatMsg.Msg;
+        std::string msgStr= replyMsg.SerializeToSend();
+        std::cout << msgStr <<std::endl;
+        wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+      }
+      if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("InviteMe", 0) == 0){
+        std::cout << "Tell: " << ChatMsg.Sender << " requesting a group Invite " << ChatMsg.Recipient << std::endl; 
+        
+        FDaraChatMsg replyMsg;
+        replyMsg.ChatType= "Cmd";
+        replyMsg.ChatType= "GroupInvite";
+        replyMsg.Sender= chatter.MyCharName;
+        replyMsg.Recipient= ChatMsg.Sender;
+        replyMsg.Msg= "";
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());

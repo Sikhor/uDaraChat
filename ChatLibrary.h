@@ -11,28 +11,43 @@ std::string ToLower(const std::string& input);
 
 
 enum class EChatType {
-    GroupInvite,
-	GroupJoin,
-	GroupDisband,
-	GroupInfo,
-	Tell,
-	Group,
-	World,
-	Zone,
-	Raid,
 	Channel,
+    Cmd,
+	Group,
+	Raid,
+    Tell,
+	Zone,
+    Unknown
 };
 
+enum class EChatCmdType{
+    GroupInvite,
+    GroupJoin,
+    GroupJoinInfo,
+    GroupDisband,
+    GroupDisbandInfo,
+    GroupKick,
+    GroupKickInfo,
+    GroupInfo, 
+    None
+};
+
+inline std::string ChatCmdTypeToString(EChatCmdType type);
+inline EChatCmdType ChatCmdTypeFromString(const std::string& str);  
+
+inline std::string ChatTypeToString(EChatType type) ;
+inline EChatType ChatTypeFromString(const std::string& str);
 
 
 class FDaraChatMsg {
 public:
     std::string ChatType;
+    std::string ChatCmdType;
     std::string Sender;
     std::string Recipient;
     std::string Msg;
 
-
+    FDaraChatMsg();
     std::string SerializeToSend();
     std::string SerializeToPost();
     std::string getTopicPrefix();

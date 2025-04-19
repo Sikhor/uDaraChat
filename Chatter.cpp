@@ -152,7 +152,8 @@ std::string Chatter::GetSubscribeString3()
 std::string Chatter::GetRandomChatMsg()
 {
   FDaraChatMsg ChatMsg;
-  ChatMsg.ChatType= "World";
+  ChatMsg.ChatType= "Channel";
+  ChatMsg.ChatCmdType= "None";
   ChatMsg.Sender= MyCharName;
   ChatMsg.Recipient= "World";
   ChatMsg.Msg= GetRandomMessage();
@@ -164,6 +165,7 @@ std::string Chatter::GetRandomZoneMsg()
 {
   FDaraChatMsg ChatMsg;
   ChatMsg.ChatType= "Zone";
+  ChatMsg.ChatCmdType= "None";
   ChatMsg.Sender= MyCharName;
   ChatMsg.Recipient= "Dungeon";
   ChatMsg.Msg= GetRandomMessage();
@@ -175,6 +177,7 @@ std::string Chatter::GetRandomTellMsg()
 {
   FDaraChatMsg ChatMsg;
   ChatMsg.ChatType= "Tell";
+  ChatMsg.ChatCmdType= "None";
   ChatMsg.Sender= MyCharName;
   ChatMsg.Recipient= GetRandomChatPartner();
   ChatMsg.Msg= GetRandomMessage();
@@ -186,6 +189,7 @@ std::string Chatter::GetRandomGroupMsg()
 {
   FDaraChatMsg ChatMsg;
   ChatMsg.ChatType= "Group";
+  ChatMsg.ChatCmdType= "None";
   ChatMsg.Sender= MyCharName;
   ChatMsg.Recipient= "Group";
   ChatMsg.Msg= GetRandomMessage();
@@ -204,19 +208,12 @@ std::string Chatter::GenerateRandomLogin()
   return line;
 }
    
-void Chatter::SendRandomMessage()
-{
-  FDaraChatMsg ChatMsg;
-  ChatMsg.ChatType= "World";
-  ChatMsg.Sender= MyCharName;
-  ChatMsg.Recipient= "World";
-  ChatMsg.Msg= GetRandomMessage();
-}
 
 std::string Chatter::GetRandomInvite()
 {
     FDaraChatMsg ChatMsg;
-    ChatMsg.ChatType= "GroupInvite";
+    ChatMsg.ChatType= "Cmd";
+    ChatMsg.ChatCmdType= "GroupInvite";
     ChatMsg.Sender= MyCharName;
     ChatMsg.Recipient= GetRandomChatPartner();
     ChatMsg.Msg= "";
@@ -241,6 +238,7 @@ void Chatter::SendZoneMessage(std::string msg)
   if(count==5){
     FDaraChatMsg ChatMsg;
     ChatMsg.ChatType= "Zone";
+    ChatMsg.ChatCmdType= "None";
     ChatMsg.Sender= MyCharName;
     ChatMsg.Recipient= MyZoneName;
     ChatMsg.Msg= msg;
@@ -259,6 +257,7 @@ void Chatter::SendTellMessage()
   if(count==5){
     FDaraChatMsg ChatMsg;
     ChatMsg.ChatType= "Tell";
+    ChatMsg.ChatCmdType= "None";
     ChatMsg.Sender= MyCharName;
     ChatMsg.Recipient= "MeMercenary";
     ChatMsg.Msg= GetRandomMessage();

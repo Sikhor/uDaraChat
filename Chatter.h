@@ -50,7 +50,6 @@ public:
     std::string GetRandomGroupMsg();
     //std::string PrepareChatMsg(FDaraChatMsg ChatMsg);
 
-    void SendRandomMessage();
     std::string GetRandomInvite();
     void SendRandomZoneMessage();
     void SendZoneMessage(std::string msg);
