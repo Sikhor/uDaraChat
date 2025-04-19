@@ -3,6 +3,8 @@
 #include <map>
 #include <iostream>
 #include <ctime>
+#include <unordered_set>
+
 
 
 struct GroupMember
@@ -55,7 +57,9 @@ class GroupContainer
         void RunGroupKickTests();
         void SetDebugLevel(int level);
         void DebugMsg(std::string msg);
+        std::vector<std::string> GetUniqueGroupIds();
         void DumpGroups();
+        void DumpInvites();
         int TestMsg(int msgId, std::string msg);
         void ErrorMsg(int msgId, std::string msg);
 

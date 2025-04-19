@@ -139,19 +139,21 @@ public:
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        return;
       }
       if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("InviteMe", 0) == 0){
         std::cout << "Tell: " << ChatMsg.Sender << " requesting a group Invite " << ChatMsg.Recipient << std::endl; 
         
         FDaraChatMsg replyMsg;
         replyMsg.ChatType= "Cmd";
-        replyMsg.ChatType= "GroupInvite";
+        replyMsg.ChatCmdType= "GroupInvite";
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
         replyMsg.Msg= "";
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        return;
       }
       if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("Ping", 0) == 0){
         std::cout << "Tell with Ping: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
@@ -164,6 +166,7 @@ public:
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        return;
       }
       if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("Hello", 0) == 0){
         std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
@@ -176,6 +179,34 @@ public:
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        return;
+      }
+      if(ChatMsg.ChatType=="Tell"){
+        std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
+        
+        FDaraChatMsg replyMsg;
+        replyMsg.ChatType= "Tell";
+        replyMsg.Sender= chatter.MyCharName;
+        replyMsg.Recipient= ChatMsg.Sender;
+        replyMsg.Msg= "Hello my friend! Good to hear from you!";
+        std::string msgStr= replyMsg.SerializeToSend();
+        std::cout << msgStr <<std::endl;
+        wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        return;
+      }
+      if(ChatMsg.ChatType=="Cmd" && ChatMsg.ChatCmdType=="GroupInfo"  && ChatMsg.Msg.rfind("Are you there?", 0) == 0){
+        std::cout << "Group: " << ChatMsg.Sender << " requesting a alive msg from me " << ChatMsg.Recipient << std::endl; 
+        
+        FDaraChatMsg replyMsg;
+        replyMsg.ChatType= "Group";
+        replyMsg.ChatCmdType= "None";
+        replyMsg.Sender= chatter.MyCharName;
+        replyMsg.Recipient= ChatMsg.Sender;
+        replyMsg.Msg= "I am alive in group!";
+        std::string msgStr= replyMsg.SerializeToSend();
+        std::cout << msgStr <<std::endl;
+        wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        return;
       }
   }
   /*************************** Music plays here *******************/

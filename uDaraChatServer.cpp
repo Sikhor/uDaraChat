@@ -250,7 +250,12 @@ void SubscribeGroupTopic(uWS::WebSocket<true, true, PerSocketData>* ws)
         return;
     }
 
-    topic = groupContainer->GetGroupTopic(perSocketData->groupId);
+    if(perSocketData->groupId.rfind("group_", 0) == 0){
+        topic = perSocketData->groupId;
+    }else{
+        topic = groupContainer->GetGroupTopic(perSocketData->groupId);
+    }
+    // Remove old group topic subscription
     if(StoreTopicSubscription(perSocketData, topic) == true){
         ws->subscribe(topic);
         std::cout << "Subscribed to standard topic: " << topic << std::endl;
@@ -338,6 +343,9 @@ int main() {
             
         },
         .message = [&app](auto *ws, std::string_view message, uWS::OpCode opCode) {
+            static int messageCount = 0;
+            messageCount++;
+
             PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
             std::cout << "*** Message Received: " << message << std::endl;
             std::string msg = std::string(message);
@@ -366,8 +374,18 @@ int main() {
 
             if (msg.rfind("schedule:", 0) == 0) {
                 groupContainer->DumpGroups();
-                std::string msg = "schedule done ";
-                ws->send(msg, opCode);
+                std::vector<std::string> groupIds= groupContainer->GetUniqueGroupIds();
+                for (auto& groupId : groupIds) {
+                    std::string topic=groupId;
+                    FDaraChatMsg msg;
+                    msg.ChatType= "Cmd";
+                    msg.ChatCmdType= "GroupInfo";
+                    msg.Sender= "GroupAdmin";
+                    msg.Recipient= "Group";
+                    msg.Msg= "Are you there?";
+                    std::cout << "Sending GroupInfo: " << topic << " : " << msg.SerializeToPost() << std::endl;    
+                    app->publish(topic, msg.SerializeToPost(), opCode);
+                }
             }
             if (msg.rfind("subscribe:", 0) == 0) {
                 HandleSubscribeMessage(ws, msg.substr(10)); 
@@ -396,12 +414,23 @@ int main() {
                 return;
             }
             if (ChatMsg.ChatType=="Group") {
-                std::string topic=ChatMsg.getTopicPrefix()+perSocketData->groupId;
+                if(perSocketData->groupId.empty()){
+                    std::cout << "Trying to send Group message with no group yet: " << ChatMsg.Sender << std::endl;
+                    return;
+                }
+                std::string topic=perSocketData->groupId;
                 app->publish(topic, ChatMsg.SerializeToPost(), opCode);
                 std::cout << "Sending Group: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
                 return;
             }
             if (ChatMsg.ChatType=="Tell") {
+                if(ChatMsg.Msg.rfind("DEBUG", 0) == 0){
+                    std::cout << "DEBUG: Messages received: " << std::to_string(messageCount) << std::endl;
+                    groupContainer->DumpGroups();
+                    groupContainer->DumpInvites();
+                    DumpTopicSubscription(perSocketData);
+                    return;
+                }
                 std::string topic=ChatMsg.getTopicPrefix()+ToLower(ChatMsg.Recipient);
                 app->publish(topic, ChatMsg.SerializeToPost(), opCode);
                 std::cout << "Sending Tell: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
@@ -461,7 +490,7 @@ int main() {
                     FDaraChatMsg msg;
                     msg.ChatType= "Group";
                     msg.Sender= perSocketData->name;
-                    std::string newGroupTopic= msg.getTopicPrefix()+perSocketData->groupId;
+                    std::string newGroupTopic= perSocketData->groupId;
                     msg.ChatType= "Cmd";
                     msg.ChatCmdType= "GroupJoinInfo";
                     app->publish(newGroupTopic, chatLibrary->GetGroupJoinInfoMessage(msg), opCode);    
@@ -472,7 +501,7 @@ int main() {
                 groupContainer->DumpGroups();// shall we let this message pass as it shall be published to the recipient?
                 return;
             }
-            if(ChatMsg.ChatType=="GroupDisband"){
+            if(ChatMsg.ChatCmdType=="GroupDisband"){
                 if(!perSocketData->groupId.empty()){
                     // disband from old group if not empty
                     std::cout << "GroupDisband: " << ChatMsg.Sender << " former groupId: " << perSocketData->groupId<< std::endl;

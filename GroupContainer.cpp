@@ -300,6 +300,34 @@ void GroupContainer::DumpGroups()
     }
 }   
 
+std::vector<std::string> GroupContainer::GetUniqueGroupIds()
+{
+    std::unordered_set<std::string> uniqueGroupIds;
+
+    for (const auto& item : MyGroups){
+        // Assuming item.groupId is a string
+        // Check if the groupId is not empty before inserting
+        if (!item.groupId.empty()){
+            uniqueGroupIds.insert(item.groupId); // assuming groupId is std::string
+        }
+    }
+
+    // Convert set to vector
+    return std::vector<std::string>(uniqueGroupIds.begin(), uniqueGroupIds.end());
+}
+
+void GroupContainer::DumpInvites()
+{
+    if (MyDebugLevel<10){
+        return ;
+    }
+    std::cout << "Current Invites:" << std::endl;
+    for (const GroupInviteData& invite : MyInvites)
+    {
+        std::cout << "Invite: Leader: " << invite.leaderName << " Member: " << invite.memberName << std::endl;
+    }
+}   
+
 
 void GroupContainer::DebugMsg(std::string msg)
 {
