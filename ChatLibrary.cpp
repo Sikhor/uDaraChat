@@ -228,7 +228,7 @@ FDaraChatMsg uDaraChatLibrary::ParseReceivedMessage(const std::string& input)
     FDaraChatMsg msg;
     msg.ChatType = parts[0];
     msg.ChatCmdType = parts[1];
-    msg.Sender = ToLower(parts[2]);
+    msg.Sender = parts[2];
     msg.Recipient= "";// its always me as I received it
 
     if(parts.size() < 4)    {
@@ -263,8 +263,8 @@ FDaraChatMsg uDaraChatLibrary::ParseSentMessage(const std::string& input)
     FDaraChatMsg msg;
     msg.ChatType = parts[0];
     msg.ChatCmdType = parts[1];
-    msg.Sender = ToLower(parts[2]);
-    msg.Recipient = ToLower(parts[3]);
+    msg.Sender = parts[2];
+    msg.Recipient = parts[3];
 
     if(parts.size() < 5)    {
         msg.Msg = ""; // No message content

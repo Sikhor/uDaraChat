@@ -175,13 +175,13 @@ public:
         replyMsg.ChatType= "Tell";
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "Hello my friend! Good to hear from you!";
+        replyMsg.Msg= "Hi my friend! Good to hear from you!";
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Tell"){
+      if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("Pong", 0) != 0){
         std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
         
         FDaraChatMsg replyMsg;
