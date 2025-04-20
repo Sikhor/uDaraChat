@@ -26,7 +26,52 @@
 
 
 
+GroupMember::GroupMember() {
+    isLeader=false;
+    storeTime= std::time(nullptr);
+}
 
+std::string GroupInfo::SerializeToSend()
+{
+    std::string serialized = groupId + ";" +
+                              leaderName + ";" +
+                              std::to_string(isLeader) + ";" +
+                              std::to_string(memberCount) + ";" +
+                              std::to_string(errorCode);
+    for (const auto& member : groupMembers) {
+        serialized += ";" + member;
+    }
+    std::cout << "Serialized GroupInfo: " << serialized << std::endl;
+    return serialized;
+}
+
+GroupInfo GroupInfo::Deserialize(const std::string msg)
+{
+    GroupInfo groupInfo;
+    std::stringstream ss(msg);
+    std::string segment;
+    std::vector<std::string> parts;
+
+    while (std::getline(ss, segment, ';')) {
+        parts.push_back(segment);
+    }
+
+    if (parts.size() < 5) {
+        return groupInfo; // Invalid message format
+    }
+
+    groupInfo.groupId = parts[0];
+    groupInfo.leaderName = parts[1];
+    groupInfo.isLeader = (parts[2] == "1");
+    groupInfo.memberCount = std::stoi(parts[3]);
+    groupInfo.errorCode = std::stoi(parts[4]);
+
+    for (size_t i = 5; i < parts.size(); ++i) {
+        groupInfo.groupMembers.push_back(parts[i]);
+    }
+
+    return groupInfo;
+}
 
 GroupContainer::GroupContainer() {}
 
@@ -203,6 +248,35 @@ GroupInfo GroupContainer::GroupDisband(const std::string& memberName)
     return MemberInfo;
 }
 
+
+void GroupContainer::AliveMsg(const std::string& memberName)
+{
+    // Update the store time of the member
+    for (GroupMember& member : MyGroups)
+    {
+        if (member.name == memberName)
+        {
+            member.storeTime = std::time(nullptr);
+            break;
+        }
+    }
+}
+
+void GroupContainer::RemoveLDGroupMembers()
+{
+    std::time_t currentTime = std::time(nullptr);
+    MyGroups.erase(
+        std::remove_if(MyGroups.begin(), MyGroups.end(),
+            [currentTime](const GroupMember& groupMember) {
+                return std::difftime(currentTime, groupMember.storeTime) > 120;
+            }),
+        MyGroups.end());
+
+
+}
+
+
+// Get the current group ID for a member
 GroupInfo GroupContainer::GetCurrentGroupId(const std::string& memberName)
 {
     GroupInfo RetInfo;
@@ -254,6 +328,7 @@ void GroupContainer::SetDebugLevel(int level)
 GroupInfo GroupContainer::GetGroupInfo(const std::string& memberName)
 {
     GroupInfo groupInfo;
+    int memberCount=0;
 
     for (const GroupMember& member : MyGroups)
     {
@@ -274,6 +349,8 @@ GroupInfo GroupContainer::GetGroupInfo(const std::string& memberName)
         if (member.groupId == groupInfo.groupId)
         {
             groupInfo.memberCount= groupInfo.memberCount+1;
+            groupInfo.groupMembers.push_back(member.name);
+            memberCount++;
             //std::cout << "Counting: " << groupInfo.memberCount<< std::endl;
         }
         if(member.groupId == groupInfo.groupId && member.isLeader){
@@ -281,7 +358,35 @@ GroupInfo GroupContainer::GetGroupInfo(const std::string& memberName)
             groupInfo.isLeader=true;
         }   
     }
+    // std::cout << "MemberCount Sum: " << groupInfo.memberCount<< std::endl;
+    groupInfo.memberCount=memberCount;
+
+    return groupInfo;
+}
+
+GroupInfo GroupContainer::GetGroupInfoByGroupId(const std::string& groupId)
+{
+    GroupInfo groupInfo;
+    int memberCount=0;
+
+    groupInfo.groupId=groupId;
+
+    for (const GroupMember& member : MyGroups)
+    {
+        if (member.groupId == groupId)
+        {
+            groupInfo.memberCount= groupInfo.memberCount+1;
+            groupInfo.groupMembers.push_back(member.name);
+            memberCount++;
+            //std::cout << "Counting: " << groupInfo.memberCount<< std::endl;
+        }
+        if(member.groupId == groupId && member.isLeader){
+            groupInfo.leaderName=member.name;
+            groupInfo.isLeader=true;
+        }   
+    }
     //std::cout << "Counting Sum: " << groupInfo.memberCount<< std::endl;
+    groupInfo.memberCount=memberCount;
 
     return groupInfo;
 }

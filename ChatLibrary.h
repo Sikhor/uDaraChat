@@ -29,6 +29,7 @@ enum class EChatCmdType{
     GroupKick,
     GroupKickInfo,
     GroupInfo, 
+    Alive,
     None
 };
 

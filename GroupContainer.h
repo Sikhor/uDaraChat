@@ -7,11 +7,14 @@
 
 
 
-struct GroupMember
+class GroupMember
 {
-    std::string name;
-    bool isLeader=false;
-    std::string groupId;
+    public:
+        std::string name;
+        bool isLeader=false;
+        std::string groupId;
+        std::time_t storeTime; 
+    GroupMember();
 };
 
 struct GroupInviteData
@@ -29,6 +32,9 @@ struct GroupInfo
     bool isLeader=false;
     int memberCount=0;
     int errorCode=0;
+    std::vector<std::string> groupMembers;
+    std::string SerializeToSend();
+    GroupInfo Deserialize(const std::string msg);
 };
 
 class GroupContainer
@@ -46,9 +52,12 @@ class GroupContainer
         GroupInfo GroupInvite(const std::string& memberName, const std::string& leaderName); 
         GroupInfo GroupKickMember(const std::string& memberName, const std::string& leaderName);
         GroupInfo GroupDisband(const std::string& memberName);
+        void AliveMsg(const std::string& memberName);
+        void RemoveLDGroupMembers();
 
         GroupInfo GetCurrentGroupId(const std::string& memberName);
         GroupInfo GetGroupInfo(const std::string& memberName);
+        GroupInfo GetGroupInfoByGroupId(const std::string& groupId);
 
         std::string GetNewGroupId();
 

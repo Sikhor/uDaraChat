@@ -194,7 +194,7 @@ public:
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Cmd" && ChatMsg.ChatCmdType=="GroupInfo"  && ChatMsg.Msg.rfind("Are you there?", 0) == 0){
+      if(ChatMsg.ChatType=="Cmd" && ChatMsg.ChatCmdType=="GroupInfo"){
         std::cout << "Group: " << ChatMsg.Sender << " requesting a alive msg from me " << ChatMsg.Recipient << std::endl; 
         
         FDaraChatMsg replyMsg;

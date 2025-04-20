@@ -65,18 +65,30 @@ inline std::string ChatCmdTypeToString(EChatCmdType type) {
     switch (type) {
         case EChatCmdType::GroupInvite: return "GroupInvite";
         case EChatCmdType::GroupJoin: return "GroupJoin";
+        case EChatCmdType::GroupJoinInfo: return "GroupJoinInfo";
         case EChatCmdType::GroupDisband: return "GroupDisband";
+        case EChatCmdType::GroupDisbandInfo: return "GroupDisbandInfo";
+        case EChatCmdType::GroupKick: return "GroupKick";
+        case EChatCmdType::GroupKickInfo: return "GroupKickInfo";
         case EChatCmdType::GroupInfo: return "GroupInfo";
+        case EChatCmdType::Alive: return "Alive";
         default: return "None";
     }   
 }
+
 
 inline EChatCmdType ChatCmdTypeFromString(const std::string& str) {
     static const std::unordered_map<std::string, EChatCmdType> stringToChatCmdType = {
         {"GroupInvite", EChatCmdType::GroupInvite},
         {"GroupJoin", EChatCmdType::GroupJoin},
+        {"GroupJoinInfo", EChatCmdType::GroupJoinInfo},
         {"GroupDisband", EChatCmdType::GroupDisband},
-        {"GroupInfo", EChatCmdType::GroupInfo}
+        {"GroupDisbandInfo", EChatCmdType::GroupDisbandInfo},
+        {"GroupKick", EChatCmdType::GroupKick},
+        {"GroupKickInfo", EChatCmdType::GroupKickInfo},
+        {"GroupInfo", EChatCmdType::GroupInfo},
+        {"Alive", EChatCmdType::Alive},
+        {"None", EChatCmdType::None}
     };
 
     auto it = stringToChatCmdType.find(str);

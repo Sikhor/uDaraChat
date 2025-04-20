@@ -298,7 +298,7 @@ int main() {
     chatLibrary->SetDebugLevel(10);
     groupContainer->SetDebugLevel(10);
 
-    groupContainer->RunTests();
+    //groupContainer->RunTests();
     //return 0;
 
 
@@ -373,6 +373,7 @@ int main() {
             }
 
             if (msg.rfind("schedule:", 0) == 0) {
+                groupContainer->RemoveLDGroupMembers();
                 groupContainer->DumpGroups();
                 std::vector<std::string> groupIds= groupContainer->GetUniqueGroupIds();
                 for (auto& groupId : groupIds) {
@@ -382,7 +383,10 @@ int main() {
                     msg.ChatCmdType= "GroupInfo";
                     msg.Sender= "GroupAdmin";
                     msg.Recipient= "Group";
-                    msg.Msg= "Are you there?";
+
+                    GroupInfo info=groupContainer->GetGroupInfoByGroupId(groupId);
+                    msg.Msg= info.SerializeToSend();
+
                     std::cout << "Sending GroupInfo: " << topic << " : " << msg.SerializeToPost() << std::endl;    
                     app->publish(topic, msg.SerializeToPost(), opCode);
                 }
@@ -521,6 +525,9 @@ int main() {
                     std::cout << "Received GroupDisband with no group ! " << ChatMsg.Sender << std::endl;
                 }
                 return;
+            }
+            if(ChatMsg.ChatCmdType=="GroupInfo"){
+                groupContainer->AliveMsg(ChatMsg.Sender);
             }
 
             std::cout << "ERROR: Why are we here? Should never come to here" << msg << std::endl;
