@@ -198,11 +198,11 @@ public:
         std::cout << "Group: " << ChatMsg.Sender << " requesting a alive msg from me " << ChatMsg.Recipient << std::endl; 
         
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Group";
-        replyMsg.ChatCmdType= "None";
+        replyMsg.ChatType= "Cmd";
+        replyMsg.ChatCmdType= "Alive";
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "I am alive in group!";
+        replyMsg.Msg= chatter.MyHealth;
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
@@ -264,10 +264,10 @@ public:
       }
     }
     if(mode=="schedule"){
-      std::this_thread::sleep_for(std::chrono::seconds(SLEEPSECONDS));
       std::string msg= "schedule:";
       std::cout << msg << count <<std::endl;
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
+      std::this_thread::sleep_for(std::chrono::seconds(30));
     }
     if(mode=="groupmember"){
       if(count==1){

@@ -1,5 +1,7 @@
 #include "GroupContainer.h"
+#include "ChatLibrary.h"
 #include <algorithm>
+#include <cstring>
 #include <random>
 #include <sstream>
 #include <iomanip>
@@ -39,7 +41,7 @@ std::string GroupInfo::SerializeToSend()
                               std::to_string(memberCount) + ";" +
                               std::to_string(errorCode);
     for (const auto& member : groupMembers) {
-        serialized += ";" + member;
+        serialized += ";" + member.name + ";" +member.zone + ";" + member.health;
     }
     std::cout << "Serialized GroupInfo: " << serialized << std::endl;
     return serialized;
@@ -56,7 +58,7 @@ GroupInfo GroupInfo::Deserialize(const std::string msg)
         parts.push_back(segment);
     }
 
-    if (parts.size() < 5) {
+    if (parts.size() < 7) {
         return groupInfo; // Invalid message format
     }
 
@@ -67,7 +69,11 @@ GroupInfo GroupInfo::Deserialize(const std::string msg)
     groupInfo.errorCode = std::stoi(parts[4]);
 
     for (size_t i = 5; i < parts.size(); ++i) {
-        groupInfo.groupMembers.push_back(parts[i]);
+        GroupMember member;
+        member.name= parts[i++];
+        member.zone= parts[i++];
+        member.health= parts[i];
+        groupInfo.groupMembers.push_back(member);
     }
 
     return groupInfo;
@@ -101,6 +107,8 @@ GroupInfo GroupContainer::GroupStartGroup(const std::string& leaderName)
     groupInfo.isLeader = newMember.isLeader;
     groupInfo.memberCount = 1;
     groupInfo.errorCode = 0;
+
+    groupInfo.groupMembers.push_back(newMember);
 
     return groupInfo;
 }   
@@ -228,8 +236,9 @@ GroupInfo GroupContainer::GroupDisband(const std::string& memberName)
 {
     GroupInfo MemberInfo;
     MemberInfo= GetGroupInfo(memberName);
-    if(!MemberInfo.groupId.empty()){
-        // Leaving this old group and need to inform group members
+    if(MemberInfo.leaderName==memberName){
+        // Leaving this group as a leader... need to assign new leader
+        AssignLeader(MemberInfo.groupId);
     }
     // Use remove-erase idiom to remove all matching members
     MyGroups.erase(
@@ -248,14 +257,34 @@ GroupInfo GroupContainer::GroupDisband(const std::string& memberName)
     return MemberInfo;
 }
 
+void GroupContainer::AssignLeader(const std::string& groupId)
+{
+    bool found=false;
+    // Make first member we find leader... old leaders will be removed
+    // should be used if leader leaves group and nowhere else
+    for (GroupMember& member : MyGroups)
+    {
+        if (member.groupId == groupId)
+        {
+            if(found){
+                member.isLeader = false;
+            }else{
+                member.isLeader = true;
+                found= true;
+            }   
+        }
+    }
+}
 
-void GroupContainer::AliveMsg(const std::string& memberName)
+void GroupContainer::AliveMsg(const GroupMember &memberAlive)
 {
     // Update the store time of the member
     for (GroupMember& member : MyGroups)
     {
-        if (member.name == memberName)
+        if (member.name == memberAlive.name)
         {
+            member.zone = memberAlive.zone;
+            member.health = memberAlive.health;
             member.storeTime = std::time(nullptr);
             break;
         }
@@ -349,7 +378,7 @@ GroupInfo GroupContainer::GetGroupInfo(const std::string& memberName)
         if (member.groupId == groupInfo.groupId)
         {
             groupInfo.memberCount= groupInfo.memberCount+1;
-            groupInfo.groupMembers.push_back(member.name);
+            groupInfo.groupMembers.push_back(member);
             memberCount++;
             //std::cout << "Counting: " << groupInfo.memberCount<< std::endl;
         }
@@ -376,7 +405,7 @@ GroupInfo GroupContainer::GetGroupInfoByGroupId(const std::string& groupId)
         if (member.groupId == groupId)
         {
             groupInfo.memberCount= groupInfo.memberCount+1;
-            groupInfo.groupMembers.push_back(member.name);
+            groupInfo.groupMembers.push_back(member);
             memberCount++;
             //std::cout << "Counting: " << groupInfo.memberCount<< std::endl;
         }
@@ -693,7 +722,7 @@ bool GroupContainer::CheckHasInvited(std::string leaderName, std::string memberN
 {
     for (const GroupInviteData& invite : MyInvites)
     {
-        if (invite.leaderName == leaderName && invite.memberName == memberName)
+        if (strcasecmp(invite.leaderName.c_str(), leaderName.c_str()) == 0 && strcasecmp(invite.memberName.c_str(), memberName.c_str())==0)
         {
             return true;
         }

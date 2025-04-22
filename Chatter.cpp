@@ -110,6 +110,7 @@ Chatter::Chatter()
   MyCharName= GetRandomName();
   MyZoneName= "Dungeon";
   MyGroupId= "";
+  MyHealth= "80";
   MyPass= GenerateHashedPassword(MyCharName);
 }
 

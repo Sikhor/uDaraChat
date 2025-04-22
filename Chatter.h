@@ -26,6 +26,7 @@ public:
     std::string MyGroupId;
     std::string MyPass;
     std::string MyZoneName;
+    std::string MyHealth;
     int DebugLevel=0;
 
 
