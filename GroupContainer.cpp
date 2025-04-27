@@ -41,7 +41,7 @@ std::string GroupInfo::SerializeToSend()
                               std::to_string(memberCount) + ";" +
                               std::to_string(errorCode);
     for (const auto& member : groupMembers) {
-        serialized += ";" + member.name + ";" +member.zone + ";" + member.health;
+        serialized += ";" + member.name;
     }
     std::cout << "Serialized GroupInfo: " << serialized << std::endl;
     return serialized;
@@ -70,9 +70,7 @@ GroupInfo GroupInfo::Deserialize(const std::string msg)
 
     for (size_t i = 5; i < parts.size(); ++i) {
         GroupMember member;
-        member.name= parts[i++];
-        member.zone= parts[i++];
-        member.health= parts[i];
+        member.name= parts[i];
         groupInfo.groupMembers.push_back(member);
     }
 
@@ -430,7 +428,8 @@ void GroupContainer::DumpGroups()
     std::cout << "Current Groups:" << std::endl;
     for (const GroupMember& member : MyGroups)
     {
-        std::cout << "Group ID: " << member.groupId << " Name: " << member.name << ", Leader: " << (member.isLeader ? "Yes" : "No") << std::endl;
+        time_t LastUpdated= std::time(nullptr)- member.storeTime;
+        std::cout << "--- Group ID: " << member.groupId << " Name: " << member.name << ", Leader: " << (member.isLeader ? "Yes" : "No") << " LastUpdated: " << std::to_string(LastUpdated) << std::endl;
     }
 }   
 

@@ -105,7 +105,7 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
                     perSocketData->connected = true;
                     perSocketData->name = perSocketData->name;
                 } else {
-                    std::cout << "ERROR: "<<ipAddress << "Invalid password for user: " << perSocketData->name << std::endl;
+                    std::cout << "ERROR: "<<ipAddress << "Invalid password for user:" << perSocketData->name << std::endl;
                     perSocketData->connected = false;
                     return false;
                 }
@@ -113,11 +113,11 @@ bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const s
         }
     }
     if(perSocketData->connected==false){
-        std::cout <<"ERROR: "<<ipAddress << "Invalid connection attempt from user: " << perSocketData->name << std::endl;
+        std::cout <<"ERROR: "<<ipAddress << "Invalid connection attempt from user:" << perSocketData->name << std::endl;
         return false;
     }
 
-    std::cout << "Log: "<<ipAddress << " [Client connected] name: " << perSocketData->name
+    std::cout << "Log: "<<ipAddress << " [Client connected] name:" << perSocketData->name
             << ", zone: " << perSocketData->zone << std::endl;
 
     perSocketData->connected = true;
@@ -130,7 +130,7 @@ bool DumpTopicSubscription(PerSocketData *data)
     for (size_t i = 0; i < data->topics.size(); ++i) {
         TopicSlot& slot = data->topics[i];
         if (slot.used) {
-            std::cout << "Topic slot " << i << ": " << slot.topic << std::endl;
+            std::cout << "Topic slot " << i << ":" << slot.topic << std::endl;
         }
     }
     return true;
@@ -153,7 +153,7 @@ bool RemoveGroupSubscription(uWS::WebSocket<true, true, PerSocketData>* ws)
             oldGroupTopic = slot.topic;
             data->topics[i].topic= "none";
             data->topics[i].used= false;
-            std::cout << data->name << " Removed group topic in slot " << i << ": " << oldGroupTopic << std::endl;
+            std::cout << data->name << " Removed group topic in slot " << i << ":" << oldGroupTopic << std::endl;
             ws->unsubscribe(oldGroupTopic);
             return true;
         }
@@ -170,7 +170,7 @@ bool RemoveTopicSubscription(uWS::WebSocket<true, true, PerSocketData>* ws,PerSo
         if (slot.used && slot.topic == oldTopic) {
             data->topics[i].topic= "none";
             data->topics[i].used= false;
-            std::cout << data->name << " Removed topic in slot " << i << ": " << oldTopic << std::endl;
+            std::cout << data->name << " Removed topic in slot " << i << ":" << oldTopic << std::endl;
             ws->unsubscribe(oldTopic);
             return true;
         }
@@ -191,11 +191,11 @@ bool StoreTopicSubscription(PerSocketData *data, const std::string& newTopic)
 
             data->topics[i].topic= newTopic;
             data->topics[i].used= true;
-            std::cout << data->name << " Subscribed to new topic in slot " << i << ": " << newTopic << std::endl;
+            std::cout << data->name << " Subscribed to new topic in slot " << i << ":" << newTopic << std::endl;
             return true;
         }
         if(slot.topic == newTopic && slot.used==true) {
-            std::cout << data->name << " Already Subscribed to topic in slot " << i << ": " << newTopic << std::endl;
+            std::cout << data->name << " Already Subscribed to topic in slot " << i << ":" << newTopic << std::endl;
             return true;
         }
     }
@@ -297,11 +297,39 @@ void SendGroupUpdateInfo(uWS::SSLApp *app, uWS::OpCode opCode, std::string group
     GroupInfo info=groupContainer->GetGroupInfoByGroupId(groupId);
     msg.Msg= info.SerializeToSend();
 
-    std::cout << "Sending GroupInfo: " << topic << " : " << msg.SerializeToPost() << std::endl;    
+    std::cout << "Sending GroupInfo: " << topic << ":" << msg.SerializeToPost() << std::endl;    
     app->publish(topic, msg.SerializeToPost(), opCode);
 
 }
 
+void ShowBinaryMessage(const std::vector<uint8_t>& data)
+{
+    FDaraRawChatMsg msg;
+    if(msg.Deserialize(data)){
+        std::cout << "Linux Server Message:\n";
+        std::cout << "Location: (" << msg.Location.X << ", " << msg.Location.Y << ", " << msg.Location.Z << ")\n";
+        std::cout << "Health: " << msg.Health << "\n";
+        std::cout << "MaxHealth: " << msg.MaxHealth << "\n";
+        std::cout << "Mana: " << msg.Mana << "\n";
+        std::cout << "MaxMana: " << msg.MaxMana << "\n";
+        std::cout << "Energy: " << msg.Energy << "\n";
+        std::cout << "MaxEnergy: " << msg.MaxEnergy << "\n";
+
+    }else{
+        std::cout << "Error: Binary format not ok"<<std::endl;
+    };
+}
+
+FDaraRawChatMsg GetRawChatMsgFromBinaryAlive(const std::vector<uint8_t>& data)
+{
+    FDaraRawChatMsg msg;
+    if(msg.Deserialize(data)){
+        return msg;
+    }else{
+        std::cout << "Error: Binary format not ok"<<std::endl;
+        return msg;
+    };
+}
 
 
 int main() {
@@ -365,7 +393,25 @@ int main() {
             messageCount++;
             
             PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
-            std::cout << "*** Message Received: " << message << std::endl;
+            if(opCode!=1){
+                // we are just resending the info in the group channel so everybody can use it
+                std::cout << "*** Message Received: OpCode: " << static_cast<int>(opCode)<< std::endl;
+                std::string topic=perSocketData->groupId;
+                std::vector<uint8_t> data(message.begin(), message.end());
+                //ShowBinaryMessage(data);
+                app->publish(topic, message, opCode);
+                // now we keep our groupmembership alive ... we are not LD yet
+                GroupMember member;
+                member.name=perSocketData->name;
+                member.zone=perSocketData->zone;
+                FDaraRawChatMsg msg= GetRawChatMsgFromBinaryAlive(data);
+                float HealthPercentage= msg.Health/msg.MaxHealth;
+                member.health= std::to_string(HealthPercentage); 
+                std::cout << "Alive: " << member.name << ":" << member.zone << ":" << member.health << std::endl;
+                groupContainer->AliveMsg(member);
+                return;
+            }
+            std::cout << "*** Message Received: OpCode: " << static_cast<int>(opCode) << " Msg:" << message << std::endl;
             std::string msg = std::string(message);
             
             
@@ -561,8 +607,18 @@ int main() {
                 member.name=ChatMsg.Sender;
                 member.zone=perSocketData->zone;
                 member.health=ChatMsg.Msg;
-                std::cout << "Alive: " << member.name << " : " << member.zone << " : " << member.health << std::endl;
+                std::cout << "Alive: " << member.name << ":" << member.zone << ":" << member.health << std::endl;
                 groupContainer->AliveMsg(member);
+
+                FDaraChatMsg msg;
+                msg.ChatType= "Cmd";
+                msg.ChatCmdType= "AliveInfo";
+                msg.Sender=ChatMsg.Sender;
+                msg.Recipient= "Group";
+                msg.Msg= member.zone + ";"+ ChatMsg.Msg;
+                std::string topic=perSocketData->groupId;
+                app->publish(topic, msg.SerializeToPost(), opCode);
+                std::cout << "Sending AliveInfo: " << topic << ":" << msg.SerializeToPost() << std::endl;
                 return;
             }
 

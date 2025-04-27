@@ -197,6 +197,7 @@ public:
       if(ChatMsg.ChatType=="Cmd" && ChatMsg.ChatCmdType=="GroupInfo"){
         std::cout << "Group: " << ChatMsg.Sender << " requesting a alive msg from me " << ChatMsg.Recipient << std::endl; 
         
+        /* old method with string
         FDaraChatMsg replyMsg;
         replyMsg.ChatType= "Cmd";
         replyMsg.ChatCmdType= "Alive";
@@ -206,6 +207,30 @@ public:
         std::string msgStr= replyMsg.SerializeToSend();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
+        */
+        FDaraRawChatMsg msg;
+        msg.CharName = chatter.MyCharName;
+        msg.Zone = chatter.MyZoneName;
+        msg.Location = { 100.0f, 200.0f, 0.0f };
+        msg.Health = 90.f;
+        msg.MaxHealth = 100.f;
+        msg.Mana = 50.f;
+        msg.MaxMana = 75.f;
+        msg.Energy = 30.f;
+        msg.MaxEnergy = 50.f;
+
+        std::cout << "Linux Bot Message:\n";
+        std::cout << "Location: (" << msg.Location.X << ", " << msg.Location.Y << ", " << msg.Location.Z << ")\n";
+        std::cout << "Health: " << msg.Health << "\n";
+        std::cout << "MaxHealth: " << msg.MaxHealth << "\n";
+        std::cout << "Mana: " << msg.Mana << "\n";
+        std::cout << "MaxMana: " << msg.MaxMana << "\n";
+        std::cout << "Energy: " << msg.Energy << "\n";
+        std::cout << "MaxEnergy: " << msg.MaxEnergy << "\n";
+        
+        std::vector<uint8_t> payload = msg.Serialize();
+        wsclient.send(websocket::OPCODE_BINARY, (const uint8_t*)payload.data(), payload.size()); 
+
         return;
       }
   }
@@ -239,6 +264,33 @@ public:
       std::string msg= chatter.GetRandomInvite();
       std::cout << msg <<std::endl;
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
+    }
+    if(mode=="Binary"){
+      FDaraRawChatMsg msg;
+        msg.CharName = chatter.MyCharName;
+        msg.Zone = chatter.MyZoneName;
+        msg.Location = { 100.0f, 200.0f, 0.0f };
+        msg.Health = 90.f;
+        msg.MaxHealth = 91.f;
+        msg.Mana = 92.f;
+        msg.MaxMana = 93.f;
+        msg.Energy = 94.f;
+        msg.MaxEnergy = 95.f;
+
+        std::cout << "Linux Bot Message:\n";
+        std::cout << "Location: (" << msg.Location.X << ", " << msg.Location.Y << ", " << msg.Location.Z << ")\n";
+        std::cout << "Health: " << msg.Health << "\n";
+        std::cout << "MaxHealth: " << msg.MaxHealth << "\n";
+        std::cout << "Mana: " << msg.Mana << "\n";
+        std::cout << "MaxMana: " << msg.MaxMana << "\n";
+        std::cout << "Energy: " << msg.Energy << "\n";
+        std::cout << "MaxEnergy: " << msg.MaxEnergy << "\n";
+        std::cout << "Zone: " << msg.Zone << "\n";
+        std::cout << "CharName: " << msg.CharName << "\n";
+        
+        std::vector<uint8_t> payload = msg.Serialize();
+        wsclient.send(websocket::OPCODE_BINARY, (const uint8_t*)payload.data(), payload.size()); 
+
     }
     if(mode=="silent"){
     }

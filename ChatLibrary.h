@@ -30,6 +30,7 @@ enum class EChatCmdType{
     GroupKickInfo,
     GroupInfo, 
     Alive,
+    AliveInfo,
     None
 };
 
@@ -52,6 +53,28 @@ public:
     std::string SerializeToSend();
     std::string SerializeToPost();
     std::string getTopicPrefix();
+};
+
+
+struct FVector {
+    float X;
+    float Y;
+    float Z;
+};
+
+struct FDaraRawChatMsg {
+    FVector Location;
+    float Health;
+    float MaxHealth;
+    float Mana;
+    float MaxMana;
+    float Energy;
+    float MaxEnergy;
+    std::string Zone;
+    std::string CharName;
+
+    bool Deserialize(const std::vector<uint8_t>& data);
+    std::vector<uint8_t> Serialize() const;
 };
 
 
