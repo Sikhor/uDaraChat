@@ -17,6 +17,7 @@
 #define DARAGROUPERRORFULL -6
 #define DARAGROUPISNOTMEMBEROFANYGROUP -7
 #define DARAGROUPISALREADYINGROUP -8
+#define DARAEMPTYGROUP -9
 
 #include <codecvt>
 #include <locale>
