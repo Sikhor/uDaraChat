@@ -28,3 +28,25 @@ GroupContainer.o: GroupContainer.cpp GroupContainer.h
 
 Chatter.o: Chatter.cpp Chatter.h
 	g++  $(CXXCLIENTFLAGS) -c Chatter.cpp
+
+
+.PHONY: StartServer CheckServer
+
+StartServer: uDaraChatServer
+	@if pgrep -x uDaraChatServer > /dev/null; then \
+		echo "uDaraChatServer is already running"; \
+		pgrep -x uDaraChatServer; \
+	else \
+		LOGFILE="log/chatserver-$$(date +%Y%m%d-%H%M%S).log"; \
+		nohup ./uDaraChatServer > "$$LOGFILE" 2>&1 & \
+		echo "Started uDaraChatServer with PID $$!"; \
+		echo "Logging to $$LOGFILE"; \
+	fi
+
+CheckServer:
+	@if pgrep -x uDaraChatServer > /dev/null; then \
+		echo "uDaraChatServer is RUNNING"; \
+		pgrep -a -x uDaraChatServer; \
+	else \
+		echo "uDaraChatServer is NOT running"; \
+	fi

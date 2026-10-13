@@ -39,6 +39,7 @@ client/uDaraListener
 client/uDaraChatBot
 client/websocket.h
 build/*
+log/*
 # settings for vscode and uWebSockets library
 uWebSockets/
 uDaraChat.code-workspace

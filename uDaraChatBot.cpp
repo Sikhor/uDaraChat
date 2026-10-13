@@ -12,7 +12,7 @@
 #include <sstream>
 #include <iomanip>
 
-#define SLEEPSECONDS 3
+#define SLEEPSECONDS 3000
 #define DEBUGMODE 1
 
 
@@ -28,7 +28,7 @@ public:
 
 
 
-  void run(std::string mode, std::string GivenName, std::string Recipient) {
+  void run(std::string mode, std::string GivenName, std::string Recipient, int SleepSeconds) {
     if (!wsclient.wsConnect(3000, DARACHATSERVERIP, DARACHATSERVERPORT, "/", DARACHATSERVERADDRESS)) {
       std::cout << "wsclient connect failed: " << wsclient.getLastError() << std::endl;
       return;
@@ -76,7 +76,7 @@ public:
     
 
     while (running.load(std::memory_order_relaxed) && wsclient.isConnected()) {
-        std::this_thread::sleep_for(std::chrono::seconds(SLEEPSECONDS));
+        std::this_thread::sleep_for(std::chrono::seconds(SleepSeconds));
         ChatLoop(mode);    
     }
     stop();
@@ -411,6 +411,18 @@ void my_handler(int s) {
   client.stop();
 }
 
+
+void SyntaxFailure()
+{
+  std::cout << "Help:" << std::endl;
+    std::cout << "uDaraChatBot --mode <mode> --name <name> --recipient <recipient> --sleep <seconds>" << std::endl;
+    std::cout << "   available modes:" << std::endl;
+    std::cout << "   1.) silent - do not send messages" << std::endl;
+    std::cout << "   2.) chatting - random Messages to world and everywhere" << std::endl;
+    std::cout << "   3.) inviting - inviting a character" << std::endl;
+    std::cout << "   4.) schedule - triggering schedules on server" << std::endl;
+}
+
 int main(int argc, char** argv) {
   std::cout << "Client trying to connect" << std::endl;
 
@@ -425,13 +437,7 @@ int main(int argc, char** argv) {
 
   /* Parsing */
   if(argc<2){
-    std::cout << "Help:" << std::endl;
-    std::cout << "uDaraChatBot --mode <mode> --name <name> --recipient <recipient>" << std::endl;
-    std::cout << "   available modes:" << std::endl;
-    std::cout << "   1.) silent - do not send messages" << std::endl;
-    std::cout << "   2.) chatting - random Messages to world and everywhere" << std::endl;
-    std::cout << "   3.) inviting - inviting a character" << std::endl;
-    std::cout << "   4.) schedule - triggering schedules on server" << std::endl;
+    SyntaxFailure();
     return 1;
   }
 
@@ -440,6 +446,9 @@ int main(int argc, char** argv) {
   std::string mode;
   std::string name;
   std::string recipient;
+  int SleepSeconds = SLEEPSECONDS;
+
+
   for (int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
       if (arg == "--mode" && i + 1 < argc) {
@@ -454,7 +463,16 @@ int main(int argc, char** argv) {
         recipient = argv[i + 1];
         ++i; // skip the next argument, already used as name
       }
+      if (arg == "--sleep" && i + 1 < argc) {
+        SleepSeconds = atoi(argv[i + 1]);
+        ++i; // skip the next argument, already used as name
+      }
 }
+
+    if(mode.empty()){
+        SyntaxFailure();
+        return 1;
+    }
 
   if (!mode.empty() && mode != "silent" && mode != "chatting" && mode != "inviting" && mode != "schedule" && mode != "groupmember" && mode != "groupleader" && mode != "pingpong"&& mode != "grouptests") {
       std::cout << "Invalid mode. Available modes: silent, chatting, inviting, schedule, groupmember, groupleader, pingpong" << std::endl;
@@ -474,7 +492,9 @@ int main(int argc, char** argv) {
   }
     
 
+  std::cout << "Starting with Sleep  " << SleepSeconds << " Seconds." << std::endl;
+  
 
-  client.run(mode, name, recipient);
+  client.run(mode, name, recipient, SleepSeconds);
   return 0;
 }
