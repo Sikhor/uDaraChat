@@ -5,6 +5,9 @@
 
 #include "JwtAuth.h"
 #include <cstdlib>
+#include <cstdio>
+#include <cerrno>
+#include <openssl/err.h>
 
 
 #ifdef LIBUS_NO_SSL
@@ -313,9 +316,24 @@ int main() {
     const std::string jwtSecret(configuredSecret); // Raw UTF-8 bytes, no decoding.
 
 
-    // this is the keyfile for later on /etc/letsencrypt/live/gameinfo.daraempire.com/privkey.pem
-    /* Keep in mind that uWS::SSLApp({options}) is the same as uWS::App() when compiled without SSL support.
-     * You may swap to using uWS:App() if you don't need SSL */
+    constexpr const char* tlsKey = "/etc/letsencrypt/live/gameinfo.daraempire.com/privkey.pem";
+    constexpr const char* tlsChain = "/etc/letsencrypt/live/gameinfo.daraempire.com/fullchain.pem";
+    bool filesReadable = true;
+    for (const char* path : {tlsKey, tlsChain}) {
+        FILE* file = std::fopen(path, "rb");
+        if (!file) {
+            const int error = errno;
+            std::cerr << "TLS startup failed: cannot open " << path << ": "
+                      << std::strerror(error) << " (errno " << error << "). "
+                      << "The service user needs read access to the file and traversal access "
+                      << "to all parent directories, including the Let's Encrypt archive symlink target."
+                      << std::endl;
+            filesReadable = false;
+        } else {
+            std::fclose(file);
+        }
+    }
+    if (!filesReadable) return 1;
     chatLibrary = new uDaraChatLibrary();
     groupContainer= new GroupContainer();
 
@@ -330,12 +348,26 @@ int main() {
  
 
 
+    ERR_clear_error();
     uWS::SSLApp *app = new uWS::SSLApp({
-        /* There are example certificates in uWebSockets.js repo */
-        .key_file_name = "misc/key.pem",
-        .cert_file_name = "misc/cert.pem",
-        .passphrase = "1234"
+        .key_file_name = tlsKey,
+        .cert_file_name = tlsChain
     });
+    if (app->constructorFailed()) {
+        std::cerr << "TLS startup failed: could not load private key " << tlsKey
+                  << " and certificate chain " << tlsChain
+                  << ". Check PEM format, matching key/certificate and file permissions." << std::endl;
+        while (const unsigned long error = ERR_get_error()) {
+            char detail[256];
+            ERR_error_string_n(error, detail, sizeof(detail));
+            std::cerr << "OpenSSL: " << detail << std::endl;
+        }
+        delete app;
+        delete groupContainer;
+        delete chatLibrary;
+        return 1;
+    }
+    bool listening = false;
     
     app->ws<PerSocketData>("/*", {
         /* Settings */
@@ -670,13 +702,21 @@ int main() {
             if (groupContainer->SetMemberOnline(data->name, false) && !data->groupId.empty())
                 SendGroupUpdateInfo(app, uWS::OpCode::TEXT, data->groupId);
         }
-    }).listen(9020, [](auto *listen_s) {
+    }).listen(9020, [&listening](auto *listen_s) {
         if (listen_s) {
-            std::cout << TimeStamp() << "Listening on port " << 9020 << std::endl;
+            listening = true;
+            std::cout << TimeStamp() << "Listening on wss://gameinfo.daraempire.com:9020/" << std::endl;
             //listen_socket = listen_s;
         }
     });
     
+    if (!listening) {
+        std::cerr << "TLS startup failed: cannot listen on port 9020; check whether another process already owns the port." << std::endl;
+        delete app;
+        delete groupContainer;
+        delete chatLibrary;
+        return 1;
+    }
     app->run();
 
     delete app;

@@ -15,7 +15,7 @@ CLIENTLIBS = -pthread
 uDaraChatServer: uDaraChatServer.cpp JwtAuth.h ChatLibrary.o GroupContainer.o
 	g++  $(CXXFLAGS) uDaraChatServer.cpp  ChatLibrary.o GroupContainer.o uWebSockets/uSockets/*.o $(LIBS) -o uDaraChatServer
 
-uDaraChatBot: uDaraChatBot.cpp ChatLibrary.o Chatter.o
+uDaraChatBot: uDaraChatBot.cpp BotWebsocket.h ChatLibrary.o Chatter.o
 	g++  $(CXXCLIENTFLAGS) uDaraChatBot.cpp  ChatLibrary.o Chatter.o $(LIBS) $(CLIENTLIBS) -o uDaraChatBot
 
 

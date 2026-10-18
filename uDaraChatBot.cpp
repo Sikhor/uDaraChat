@@ -1,4 +1,7 @@
-#include "client/websocket.h"
+#define DARA_WEBSOCKET_TLS
+#include "BotWebsocket.h"
+#include <cstdlib>
+#include <algorithm>
 #include "Chatter.h"
 #include <iostream>
 #include <thread>
@@ -13,6 +16,9 @@
 #include <iomanip>
 
 #define SLEEPSECONDS 3000
+
+constexpr const char* BotServerHost = "gameinfo.daraempire.com";
+constexpr const char* BotServerAddress = "gameinfo.daraempire.com:9020";
 #define DEBUGMODE 1
 
 
@@ -28,9 +34,12 @@ public:
 
 
 
-  void run(std::string mode, std::string GivenName, std::string Recipient, int SleepSeconds) {
-    if (!wsclient.wsConnect(3000, DARACHATSERVERIP, DARACHATSERVERPORT, "/", DARACHATSERVERADDRESS)) {
-      std::cout << "wsclient connect failed: " << wsclient.getLastError() << std::endl;
+  void run(std::string mode, std::string GivenName, std::string Recipient, int SleepSeconds, const std::string& token) {
+    if (!wsclient.wsConnect(3000, BotServerHost, DARACHATSERVERPORT, "/", BotServerAddress)) {
+      std::cerr << "Connection to wss://" << BotServerAddress << "/ failed:\n  "
+                << wsclient.getLastError()
+                << "\nJWT authentication has not started; this failure occurred while opening the secure WebSocket."
+                << std::endl;
       return;
     }
     running = true;
@@ -51,19 +60,17 @@ public:
     std::cout << "Client running..." << std::endl;
     std::string line;
 
-    if(GivenName.empty()){
-      GivenName= chatter.GenerateRandomLogin();
-    }else{
-      chatter.SetCharName(GivenName);
-    } 
+    chatter.SetCharName(GivenName);
     if(Recipient.empty()){
       chatter.AddChatPartner(chatter.GetRandomName());
     }else{
       chatter.AddChatPartner(Recipient);
     }
     
-    // Login 
-    std::string msg= chatter.GetConnectionString();
+    // Login and subscribe before allowing polling callbacks to send replies.
+    {
+    std::lock_guard<std::mutex> lock(mtx);
+    std::string msg = "connect:name=" + GivenName + ";zone=" + chatter.MyZoneName + ";group=;pass=" + token;
     wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
     msg= chatter.GetSubscribeString1();
     wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
@@ -71,13 +78,15 @@ public:
     wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
     msg= chatter.GetSubscribeString3();
     wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
+    }
     
     
     
 
     while (running.load(std::memory_order_relaxed) && wsclient.isConnected()) {
         std::this_thread::sleep_for(std::chrono::seconds(SleepSeconds));
-        ChatLoop(mode);    
+        std::lock_guard<std::mutex> lock(mtx);
+        if (wsclient.isConnected()) ChatLoop(mode);
     }
     stop();
 
@@ -90,7 +99,10 @@ public:
 
 
   void onWSClose(WSConn& conn, uint16_t status_code, const char* reason) {
-    std::cout << "ws close, status_code: " << status_code << ", reason: " << reason << std::endl;
+    std::cerr << "WebSocket disconnected (code " << status_code << "): " << reason << std::endl;
+    if (status_code == 1008) {
+      std::cerr << "Server policy/authentication rejection: check token signature, expiry, issuer, audience and exact character name. Check server logs for the rejection reason." << std::endl;
+    }
   }
 
   void onWSMsg(WSConn& conn, uint8_t opcode, const uint8_t* payload, uint32_t pl_len) {
@@ -415,7 +427,8 @@ void my_handler(int s) {
 void SyntaxFailure()
 {
   std::cout << "Help:" << std::endl;
-    std::cout << "uDaraChatBot --mode <mode> --name <name> --recipient <recipient> --sleep <seconds>" << std::endl;
+    std::cout << "uDaraChatBot --mode <mode> --name <JWT characterName> [--token <JWT>] --recipient <recipient> --sleep <seconds>" << std::endl;
+    std::cout << "   Use --token <JWT> or set DARA_CHAT_JWT_TOKEN; --token takes precedence." << std::endl;
     std::cout << "   available modes:" << std::endl;
     std::cout << "   1.) silent - do not send messages" << std::endl;
     std::cout << "   2.) chatting - random Messages to world and everywhere" << std::endl;
@@ -446,11 +459,21 @@ int main(int argc, char** argv) {
   std::string mode;
   std::string name;
   std::string recipient;
+  std::string token;
+  bool tokenProvided = false;
   int SleepSeconds = SLEEPSECONDS;
 
 
   for (int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
+      if (arg == "--token") {
+        if (i + 1 >= argc || std::string(argv[i + 1]).rfind("--", 0) == 0) {
+          std::cerr << "--token requires a JWT value." << std::endl;
+          return 1;
+        }
+        token = argv[++i];
+        tokenProvided = true;
+      }
       if (arg == "--mode" && i + 1 < argc) {
           mode = argv[i + 1];
           ++i; // skip the next argument, already used as name
@@ -484,6 +507,18 @@ int main(int argc, char** argv) {
       mode="silent";
       std::cout << "Starting with standard mode: "<< mode << std::endl;
   }
+  const char* configuredToken = std::getenv("DARA_CHAT_JWT_TOKEN");
+  if (!tokenProvided && configuredToken) token = configuredToken;
+  if (name.empty() || name.find_first_of(";\r\n") != std::string::npos ||
+      token.empty()) {
+      std::cerr << "A valid --name matching JWT characterName and a JWT via --token or DARA_CHAT_JWT_TOKEN are required." << std::endl;
+      return 1;
+  }
+  if (token.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_ .") != std::string::npos ||
+      token.find(' ') != std::string::npos || std::count(token.begin(), token.end(), '.') != 2) {
+      std::cerr << "Token must be a compact JWT." << std::endl;
+      return 1;
+  }
   if(!name.empty()) {
       std::cout << "Starting with name " << name << "!" << std::endl;
   } else {
@@ -495,6 +530,6 @@ int main(int argc, char** argv) {
   std::cout << "Starting with Sleep  " << SleepSeconds << " Seconds." << std::endl;
   
 
-  client.run(mode, name, recipient, SleepSeconds);
+  client.run(mode, name, recipient, SleepSeconds, token);
   return 0;
 }
