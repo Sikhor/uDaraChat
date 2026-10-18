@@ -3,7 +3,13 @@
 #include "GroupContainer.h"
 
 
-#include <openssl/sha.h>
+#include "JwtAuth.h"
+#include <cstdlib>
+
+
+#ifdef LIBUS_NO_SSL
+#error "JWT bearer authentication requires TLS support"
+#endif
 #include <sstream>
 #include <iomanip>
 
@@ -58,22 +64,6 @@ std::string TimeStamp()
 
 
 
-std::string GenerateHashedPassword(const std::string& passphrase)
-{
-    unsigned char hash[SHA_DIGEST_LENGTH]; // SHA-1 is 20 bytes
-
-    SHA1(reinterpret_cast<const unsigned char*>(passphrase.c_str()), passphrase.size(), hash);
-
-    std::ostringstream oss;
-    for (int i = 0; i < SHA_DIGEST_LENGTH; ++i)
-    {
-        oss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
-    }
-
-    return oss.str();
-}
-
-
 std::string ConvertMappedIPv6ToIPv4(const std::string& ipv6)
 {
     // Assume the format is always "0000:...:ffff:xxxx:yyyy"
@@ -100,49 +90,13 @@ std::string ConvertMappedIPv6ToIPv4(const std::string& ipv6)
     return oss.str();
 }
 
-bool HandleConnect(PerSocketData *perSocketData, const std::string& Msg, const std::string &ipAddress) 
-{
-    std::string msg = Msg.substr(8); // remove "connect:"
-            
-    perSocketData->connected = false;
-
-    // Expected format: name=John;zone=Alpha;group=7
-    std::istringstream ss(msg);
-    std::string token;
-    while (std::getline(ss, token, ';')) {
-        auto delimiterPos = token.find('=');
-        if (delimiterPos != std::string::npos) {
-            std::string key = token.substr(0, delimiterPos);
-            std::string value = token.substr(delimiterPos + 1);
-
-            if (key == "name") perSocketData->name = value;
-            else if (key == "zone") perSocketData->zone = value;
-            // ignoring group... cannot be passed in else if (key == "group") perSocketData->groupId = value;
-            else if (key == "pass") {
-                // Check if the password is correct
-                std::string hashedPassword = GenerateHashedPassword(perSocketData->name);
-                if (hashedPassword == value) { // Replace with your expected hashed password
-                    perSocketData->connected = true;
-                    perSocketData->name = perSocketData->name;
-                } else {
-                    std::cout << TimeStamp() << "ERROR: "<<ipAddress << " Invalid password for user:" << perSocketData->name << std::endl;
-                    perSocketData->connected = false;
-                    return false;
-                }
-            }
-        }
-    }
-    if(perSocketData->connected==false){
-        std::cout << TimeStamp() <<"ERROR: "<<ipAddress << " Invalid connection attempt from user: " << perSocketData->name << std::endl;
-        // ATTENTION NORMALLY WE WOULD RETURN FALSE HERE but no password from client given atm
-        //std::cout <<"ERROR: "<<" This Server is not expecting password and this must be changed" << std::endl;
-        return false;
-    }
-
-    std::cout << TimeStamp() << "Log: "<<ipAddress << " [Client connected] name:" << perSocketData->name
-            << ", zone: " << perSocketData->zone << std::endl;
-
-    perSocketData->connected = true;
+bool HandleConnect(PerSocketData *data, const std::string& message,
+                   const std::string& secret, std::string& failureReason) {
+    auto login = dara::VerifyLogin(message, secret, std::chrono::system_clock::now(), &failureReason);
+    if (!login) return false;
+    data->name = login->characterName;
+    data->zone = login->zone;
+    data->connected = true;
     return true;
 }
 
@@ -351,6 +305,13 @@ FDaraRawChatMsg GetRawChatMsgFromBinaryAlive(const std::vector<uint8_t>& data)
 
 
 int main() {
+    const char* configuredSecret = std::getenv("DARA_CHAT_JWT_SECRET");
+    if (!configuredSecret || !*configuredSecret) {
+        std::cerr << "DARA_CHAT_JWT_SECRET must be set and nonempty" << std::endl;
+        return 1;
+    }
+    const std::string jwtSecret(configuredSecret); // Raw UTF-8 bytes, no decoding.
+
 
     // this is the keyfile for later on /etc/letsencrypt/live/gameinfo.daraempire.com/privkey.pem
     /* Keep in mind that uWS::SSLApp({options}) is the same as uWS::App() when compiled without SSL support.
@@ -401,11 +362,11 @@ int main() {
             }
             std::string_view remoteAddress = ws->getRemoteAddressAsText();
             std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
-            std::cout << TimeStamp() << "Log: Connect from Client IP: " << remoteAddressIPV4 << std::endl;
+            std::cout << TimeStamp() << "[WS OPEN] Awaiting JWT login; ip=" << remoteAddressIPV4 << std::endl;
             
             
         },
-        .message = [&app](auto *ws, std::string_view message, uWS::OpCode opCode) {
+        .message = [&app, &jwtSecret](auto *ws, std::string_view message, uWS::OpCode opCode) {
             static int messageCount = 0;
             static bool scheduleFlip= false;
             messageCount++;
@@ -432,16 +393,22 @@ int main() {
                 groupContainer->AliveMsg(member);
                 return;
             }
-            std::cout << TimeStamp() << "*** Message Received: OpCode: " << static_cast<int>(opCode) << " Msg:" << message << std::endl;
+            // Do not log raw text frames: login frames contain bearer credentials.
             std::string msg = std::string(message);
             
             
             if (msg.rfind("connect:", 0) == 0) {
+                if (perSocketData->connected) {
+                    std::cout << TimeStamp() << "[AUTH REJECTED] Socket is already authenticated; open a new WebSocket to reauthenticate" << std::endl;
+                    ws->end(1008, "Reconnect to reauthenticate");
+                    return;
+                }
                 // get remote address
                 std::string_view remoteAddress = ws->getRemoteAddressAsText();
                 std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
                 // handle connect
-                if(HandleConnect(perSocketData, msg, remoteAddressIPV4)){
+                std::string failureReason;
+                if(HandleConnect(perSocketData, msg, jwtSecret, failureReason)){
                     // setting groupId from group container
                     // One authenticated connection per character. Retire the old socket on reconnect.
                     auto old = activeSessions.find(perSocketData->name);
@@ -455,6 +422,10 @@ int main() {
                         std::cout << TimeStamp() << "GroupUpdate to all" << std::endl;
                         SendGroupUpdateInfo(app, opCode, perSocketData->groupId);
                     }
+                } else {
+                    std::cout << TimeStamp() << "[AUTH REJECTED] ip=" << remoteAddressIPV4
+                              << " reason=" << failureReason << std::endl;
+                    ws->end(1008, "Authentication failed");
                 }
                 return;
             }
@@ -462,7 +433,7 @@ int main() {
                 // get remote address
                 std::string_view remoteAddress = ws->getRemoteAddressAsText();
                 std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
-                std::cout << TimeStamp() <<"ERROR: "<< remoteAddressIPV4<< " Client " + perSocketData->name +" not connected, ignoring message"<< std::endl;
+                std::cout << TimeStamp() <<"ERROR: "<< remoteAddressIPV4<< " [AUTH REQUIRED] Message ignored: WebSocket is open but login has not succeeded; send connect:name=<characterName>;zone=<zone>;group=;pass=<JWT> first"<< std::endl;
                 return;
             }
 

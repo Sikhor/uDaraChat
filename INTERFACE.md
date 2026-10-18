@@ -1,6 +1,6 @@
 # uDaraChatServer – Interface Documentation
 
-As of October 14, 2026, based on the current local source code.
+As of October 18, 2026, based on the current local source code.
 This document describes the behavior actually implemented by the server.
 
 ## 1. Connection and authentication
@@ -14,21 +14,51 @@ as `misc/key.pem` and `misc/cert.pem`.
 After the WebSocket handshake, the client must first send a text frame:
 
 ```text
-connect:name=Alice;zone=Dungeon;pass=<sha1-of-Alice>
+connect:name=Alice;zone=Dungeon;group=;pass=<JWT>
 ```
 
 | Parameter | Meaning |
 | --- | --- |
 | `name` | Character name; always use the same capitalization for consistent group management |
 | `zone` | Current zone, for example `Dungeon` |
-| `pass` | SHA-1 of the character name, encoded as 40 lowercase hexadecimal characters |
+| `pass` | JWT issued by the Unreal game server |
 | `group` | Ignored; the server determines group membership itself |
 
-Parameters are processed in order: **`name` must appear before `pass`**.
-In the current protocol, `pass` is derived solely from the name rather than being
-a password chosen by the user. Authentication therefore does not verify a secret
-credential. Without a valid `pass`, the server does not process further chat commands.
-There is no explicit authentication success or error response.
+Parameters may appear in any order; duplicate fields are rejected. The JWT must
+be signed with **HS256** using `DARA_CHAT_JWT_SECRET` as raw UTF-8 bytes (no Base64
+or hex decoding). The secret must exactly match the Unreal server's value.
+The server refuses to start if it is missing or empty. Other algorithms,
+including `none`, and old hashed passwords are rejected.
+
+Required claims are `iss` = `dara-game-server`, `aud` containing `dara-chat`,
+integer Unix timestamps `iat` and `exp`, and a nonempty string `characterName`.
+Expired tokens and future-issued tokens are rejected with at most 30 seconds
+of clock tolerance. `exp` must be later than `iat`. Unreal currently issues
+1800-second tokens; the chat server does not impose an additional lifetime cap.
+The message's `name` must exactly match the verified `characterName`, which is
+used as the authenticated identity. `sub` is not used because it is currently
+`"0"` for all players. JWT authentication does **not** verify the supplied `zone`
+or `group`; `group` is ignored in favor of server-managed membership.
+
+Invalid logins close the WebSocket with code `1008`, reason `Authentication failed`.
+Server logs distinguish `[WS OPEN]` (transport connected, awaiting login),
+`[AUTH REJECTED]` (with IP and a safe validation reason), and `[AUTH REQUIRED]`
+(a message arrived before successful authentication). Rejection reasons identify
+missing/malformed tokens, unsupported algorithms, invalid claims, clock/expiry
+problems, signature failures, and character-name mismatches without logging
+credentials. Claim diagnostics describe validation failures, not trusted identity.
+There is no explicit success response. Raw text frames, JWTs, and signing secrets
+are not logged. Use **WSS in production**: the JWT is a bearer credential.
+
+Every new connection verifies its JWT again, including expiration. Once a
+connection is authenticated, it stays authenticated until it closes, even after
+the JWT expires. There is currently no token refresh requirement or refresh
+protocol. Refresh support may be added later. Reconnecting requires a JWT that
+is valid at the time of login; an expired token cannot authenticate a new
+connection.
+
+Sending `connect:` on an already authenticated socket closes it with code `1008`,
+reason `Reconnect to reauthenticate`. To authenticate again, open a new WebSocket.
 
 Successful authentication automatically subscribes the client to these topics:
 
@@ -128,7 +158,7 @@ intended chat types and retain automatically managed subscriptions.
 
 There is no dedicated command for changing zones. To change zones, authenticate
 a new WebSocket connection with the new zone. Sending `connect:` again on the
-same connection does not reliably remove old subscriptions.
+same authenticated connection closes it; use a new connection.
 
 ## 4. Managing groups
 
@@ -229,7 +259,7 @@ query command.
 ### Complete example with two clients
 
 ```text
-Alice → Server: connect:name=Alice;zone=Dungeon;pass=<sha1-of-Alice>
+Alice → Server: connect:name=Alice;zone=Dungeon;group=;pass=<JWT>
 Bob   → Server: connect:name=Bob;zone=Dungeon;pass=<sha1-of-Bob>
 Alice → Server: Cmd:GroupInvite:Alice:Bob:
 Server → Bob:  Cmd:GroupInvite:Alice:

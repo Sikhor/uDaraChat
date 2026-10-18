@@ -4,15 +4,15 @@ clean:
 	rm -f uDaraChatServer uDaraChatBot *.o
 
 run: uDaraChatServer uDaraChatBot
-	./uDaraChatServer
+	@sh scripts/with-jwt-secret.sh ./uDaraChatServer
 
 
-CXXFLAGS = -march=native -O3 -Wpedantic -Wall -Wextra -Wsign-conversion -Wconversion -std=c++20 -I. -IuWebSockets/src -IuWebSockets/uSockets/src -flto=auto
+CXXFLAGS = -march=native -O3 -Wpedantic -Wall -Wextra -Wsign-conversion -Wconversion -std=c++20 -I. -isystem third_party/jwt-cpp/include -IuWebSockets/src -IuWebSockets/uSockets/src -flto=auto
 LIBS = -lz -lssl -lcrypto
 CXXCLIENTFLAGS= -O0 -g -std=c++17 -I. 
 CLIENTLIBS = -pthread
 
-uDaraChatServer: uDaraChatServer.cpp ChatLibrary.o GroupContainer.o
+uDaraChatServer: uDaraChatServer.cpp JwtAuth.h ChatLibrary.o GroupContainer.o
 	g++  $(CXXFLAGS) uDaraChatServer.cpp  ChatLibrary.o GroupContainer.o uWebSockets/uSockets/*.o $(LIBS) -o uDaraChatServer
 
 uDaraChatBot: uDaraChatBot.cpp ChatLibrary.o Chatter.o
@@ -37,8 +37,10 @@ StartServer: uDaraChatServer
 		echo "uDaraChatServer is already running"; \
 		pgrep -x uDaraChatServer; \
 	else \
+		mkdir -p log; \
+		sh scripts/with-jwt-secret.sh true || exit 1; \
 		LOGFILE="log/chatserver-$$(date +%Y%m%d-%H%M%S).log"; \
-		nohup ./uDaraChatServer > "$$LOGFILE" 2>&1 & \
+		nohup sh scripts/with-jwt-secret.sh ./uDaraChatServer > "$$LOGFILE" 2>&1 & \
 		echo "Started uDaraChatServer with PID $$!"; \
 		echo "Logging to $$LOGFILE"; \
 	fi
@@ -50,3 +52,11 @@ CheckServer:
 	else \
 		echo "uDaraChatServer is NOT running"; \
 	fi
+
+.PHONY: test
+test: build/JwtAuthTest
+	./build/JwtAuthTest
+
+build/JwtAuthTest: tests/JwtAuthTest.cpp JwtAuth.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) tests/JwtAuthTest.cpp -lssl -lcrypto -o $@
