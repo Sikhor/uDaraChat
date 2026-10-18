@@ -30,6 +30,7 @@
 
 GroupMember::GroupMember() {
     isLeader=false;
+    isOnline=false;
     storeTime= std::time(nullptr);
 }
 
@@ -41,7 +42,7 @@ std::string GroupInfo::SerializeToSend()
                               std::to_string(memberCount) + ";" +
                               std::to_string(errorCode);
     for (const auto& member : groupMembers) {
-        serialized += ";" + member.name;
+        serialized += ";" + member.name + "," + (member.isOnline ? "1" : "0");
     }
     std::cout << "Serialized GroupInfo: " << serialized << std::endl;
     return serialized;
@@ -58,7 +59,7 @@ GroupInfo GroupInfo::Deserialize(const std::string msg)
         parts.push_back(segment);
     }
 
-    if (parts.size() < 7) {
+    if (parts.size() < 5) {
         return groupInfo; // Invalid message format
     }
 
@@ -70,7 +71,13 @@ GroupInfo GroupInfo::Deserialize(const std::string msg)
 
     for (size_t i = 5; i < parts.size(); ++i) {
         GroupMember member;
-        member.name= parts[i];
+        auto sep = parts[i].rfind(',');
+        if (sep != std::string::npos && (parts[i].substr(sep + 1) == "0" || parts[i].substr(sep + 1) == "1")) {
+            member.name = parts[i].substr(0, sep);
+            member.isOnline = parts[i].substr(sep + 1) == "1";
+        } else {
+            member.name = parts[i]; // legacy protocol
+        }
         groupInfo.groupMembers.push_back(member);
     }
 
@@ -97,6 +104,7 @@ GroupInfo GroupContainer::GroupStartGroup(const std::string& leaderName)
     newMember.name = leaderName;
     newMember.groupId = GetNewGroupId();
     newMember.isLeader = true;
+    newMember.isOnline = true;
     MyGroups.push_back(newMember);
 
     GroupInfo groupInfo;
@@ -146,10 +154,12 @@ GroupInfo GroupContainer::GroupJoin(const std::string& memberName, const std::st
     newMember.name = memberName;
     newMember.groupId = LeaderInfo.groupId;
     newMember.isLeader = false;
+    newMember.isOnline = true;
     MyGroups.push_back(newMember);
 
     // as we join group group is now one more
     LeaderInfo.memberCount = LeaderInfo.memberCount + 1;
+    LeaderInfo.groupMembers.push_back(newMember);
 
     return LeaderInfo;
 }
@@ -179,7 +189,7 @@ GroupInfo GroupContainer::GroupInvite(const std::string& memberName, const std::
         MemberInfo.memberCount=0;
         return MemberInfo;
     }
-    if(MemberInfo.groupId==LeaderInfo.groupId){   
+    if(!MemberInfo.groupId.empty() && MemberInfo.groupId==LeaderInfo.groupId){   
         MemberInfo.errorCode= DARAGROUPISALREADYINGROUP;
         MemberInfo.groupId="";
         MemberInfo.memberCount=0;
@@ -225,8 +235,7 @@ GroupInfo GroupContainer::GroupKickMember(const std::string& memberName, const s
             MyGroups.end()
         );
 
-    GroupInfo RetInfo;
-    return RetInfo;
+    return GetGroupInfo(leaderName);
 }
 
 // always returns true;
@@ -234,10 +243,7 @@ GroupInfo GroupContainer::GroupDisband(const std::string& memberName)
 {
     GroupInfo MemberInfo;
     MemberInfo= GetGroupInfo(memberName);
-    if(MemberInfo.leaderName==memberName){
-        // Leaving this group as a leader... need to assign new leader
-        AssignLeader(MemberInfo.groupId);
-    }
+    const bool wasLeader = MemberInfo.leaderName == memberName;
     // Use remove-erase idiom to remove all matching members
     MyGroups.erase(
         std::remove_if(MyGroups.begin(), MyGroups.end(),
@@ -248,6 +254,7 @@ GroupInfo GroupContainer::GroupDisband(const std::string& memberName)
         MyGroups.end()
     );
 
+    if (wasLeader) AssignLeader(MemberInfo.groupId);
     MemberInfo.errorCode= DARAGROUPSUCCESS;
     MemberInfo.groupId= "";
     MemberInfo.memberCount=0;
@@ -284,22 +291,29 @@ void GroupContainer::AliveMsg(const GroupMember &memberAlive)
             member.zone = memberAlive.zone;
             member.health = memberAlive.health;
             member.storeTime = std::time(nullptr);
+            member.isOnline = true;
             break;
         }
     }
 }
 
+bool GroupContainer::SetMemberOnline(const std::string& memberName, bool online)
+{
+    for (auto& member : MyGroups) {
+        if (member.name == memberName) {
+            const bool changed = member.isOnline != online;
+            member.isOnline = online;
+            if (online) member.storeTime = std::time(nullptr);
+            return changed;
+        }
+    }
+    return false;
+}
+
 void GroupContainer::RemoveLDGroupMembers()
 {
-    std::time_t currentTime = std::time(nullptr);
-    MyGroups.erase(
-        std::remove_if(MyGroups.begin(), MyGroups.end(),
-            [currentTime](const GroupMember& groupMember) {
-                return std::difftime(currentTime, groupMember.storeTime) > 120;
-            }),
-        MyGroups.end());
-
-
+    // Legacy scheduled task: never delete group membership on timeout.
+    // A WebSocket close marks members offline immediately instead.
 }
 
 
@@ -382,7 +396,7 @@ GroupInfo GroupContainer::GetGroupInfo(const std::string& memberName)
         }
         if(member.groupId == groupInfo.groupId && member.isLeader){
             groupInfo.leaderName=member.name;
-            groupInfo.isLeader=true;
+            groupInfo.isLeader=(member.name == memberName);
         }   
     }
     // std::cout << "MemberCount Sum: " << groupInfo.memberCount<< std::endl;
@@ -429,7 +443,7 @@ void GroupContainer::DumpGroups()
     for (const GroupMember& member : MyGroups)
     {
         time_t LastUpdated= std::time(nullptr)- member.storeTime;
-        std::cout << "--- Group ID: " << member.groupId << " Name: " << member.name << ", Leader: " << (member.isLeader ? "Yes" : "No") << " LastUpdated: " << std::to_string(LastUpdated) << std::endl;
+        std::cout << "--- Group ID: " << member.groupId << " Name: " << member.name << ", Leader: " << (member.isLeader ? "Yes" : "No") << " Online: " << (member.isOnline ? "Yes" : "No") << " LastUpdated: " << std::to_string(LastUpdated) << std::endl;
     }
 }   
 
@@ -741,7 +755,7 @@ void GroupContainer::AddInvite(std::string leaderName, std::string memberName)
 
 std::string GroupContainer::GetGroupTopic(std::string groupId)
 {
-    std::string topic= "group_";
-    topic+= groupId;
-    return topic;   
+    if (groupId.empty()) return "";
+    if (groupId.rfind(MyGroupPrefix, 0) == 0) return groupId;
+    return MyGroupPrefix + groupId;   
 }

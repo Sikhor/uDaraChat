@@ -1,3 +1,4 @@
+#pragma once
 #include <vector>
 #include <string>
 #include <map>
@@ -12,6 +13,7 @@ class GroupMember
     public:
         std::string name;
         bool isLeader=false;
+        bool isOnline=false;
         std::string groupId;
         std::string zone;
         std::string health;
@@ -56,6 +58,7 @@ class GroupContainer
         GroupInfo GroupDisband(const std::string& memberName);
         void AssignLeader(const std::string& groupId);
         void AliveMsg(const GroupMember &member);
+        bool SetMemberOnline(const std::string& memberName, bool online);
         void RemoveLDGroupMembers();
 
         GroupInfo GetCurrentGroupId(const std::string& memberName);

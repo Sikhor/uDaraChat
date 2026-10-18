@@ -10,12 +10,14 @@
 #include <arpa/inet.h>      // For inet_ntop
 #include <netinet/in.h>     // For sockaddr_in and sockaddr_in6
 #include <cstring>          // For memset if needed
+#include <unordered_map>
 
    
 #define DEBUGLEVEL 1
 
 uDaraChatLibrary *chatLibrary;
 GroupContainer *groupContainer;
+
 
 
 struct us_listen_socket_t *global_listen_socket;
@@ -36,6 +38,8 @@ struct PerSocketData {
 
     bool connected = false;
 };
+using DaraSocket = uWS::WebSocket<true, true, PerSocketData>;
+std::unordered_map<std::string, DaraSocket*> activeSessions;
 
 
 std::string TimeStamp()
@@ -159,10 +163,6 @@ bool DumpTopicSubscription(PerSocketData *data)
 bool RemoveGroupSubscription(uWS::WebSocket<true, true, PerSocketData>* ws) 
 {
     PerSocketData *data = (PerSocketData *) ws->getUserData();
-    if(data->groupId.empty()){
-        std::cout << TimeStamp() << "No groupId set, so no need to unsubscribe" << std::endl;
-        return false;
-    }
     std::string oldGroupTopic;
     for (size_t i = 0; i < data->topics.size(); ++i) {
         TopicSlot& slot = data->topics[i];
@@ -223,12 +223,12 @@ bool StoreTopicSubscription(PerSocketData *data, const std::string& newTopic)
 
 bool CheckValidTopicName(const std::string& topicName) {
     // tell channels are only for direct tells. Therefore they are forbidden
-    if (topicName.rfind("tell_", 0) == 0) {
+    if (topicName.rfind("tell_", 0) == 0 || topicName == "World") {
         std::cout << TimeStamp() << "Invalid topic reserved for a private tell channel: " << topicName << std::endl;
         return false;
     }
     // zone channels are only for the zone server. Therefore they are forbidden
-    if (topicName.rfind("zone_", 0) == 0) {
+    if (topicName.rfind("group_", 0) == 0 || topicName.rfind("zone_", 0) == 0) {
         std::cout << TimeStamp() << "Invalid topic reserved for a zone channel: " << topicName << std::endl;
         return false;
     }
@@ -305,7 +305,7 @@ void SubscribeStandardTopics(uWS::WebSocket<true, true, PerSocketData>* ws)
 
 void SendGroupUpdateInfo(uWS::SSLApp *app, uWS::OpCode opCode, std::string groupId)
 {
-    std::string topic=groupId;
+    std::string topic=groupContainer->GetGroupTopic(groupId);
     FDaraChatMsg msg;
     msg.ChatType= "Cmd";
     msg.ChatCmdType= "GroupInfo";
@@ -417,12 +417,15 @@ int main() {
                 std::string topic=perSocketData->groupId;
                 std::vector<uint8_t> data(message.begin(), message.end());
                 //ShowBinaryMessage(data);
+                if (!perSocketData->connected || perSocketData->groupId.empty()) return;
+                FDaraRawChatMsg validated;
+                if (!validated.Deserialize(data) || validated.MaxHealth <= 0) return;
                 app->publish(topic, message, opCode);
                 // now we keep our groupmembership alive ... we are not LD yet
                 GroupMember member;
                 member.name=perSocketData->name;
                 member.zone=perSocketData->zone;
-                FDaraRawChatMsg msg= GetRawChatMsgFromBinaryAlive(data);
+                FDaraRawChatMsg msg= validated;
                 float HealthPercentage= msg.Health/msg.MaxHealth;
                 member.health= std::to_string(HealthPercentage); 
                 std::cout << TimeStamp() << "Alive: " << member.name << ":" << member.zone << ":" << member.health << std::endl;
@@ -440,7 +443,12 @@ int main() {
                 // handle connect
                 if(HandleConnect(perSocketData, msg, remoteAddressIPV4)){
                     // setting groupId from group container
+                    // One authenticated connection per character. Retire the old socket on reconnect.
+                    auto old = activeSessions.find(perSocketData->name);
+                    if (old != activeSessions.end() && old->second != ws) old->second->end(1000, "Reconnected");
+                    activeSessions[perSocketData->name] = ws;
                     perSocketData->groupId= groupContainer->GetCurrentGroupId(perSocketData->name).groupId;
+                    groupContainer->SetMemberOnline(perSocketData->name, true);
                     std::cout << TimeStamp() << "Log: "<< remoteAddressIPV4 << " Client " + perSocketData->name + " connected with groupid:"<< perSocketData->groupId << std::endl;
                     SubscribeStandardTopics(ws);
                     if(!perSocketData->groupId.empty()){
@@ -459,6 +467,8 @@ int main() {
             }
 
             if (msg.rfind("schedule:", 0) == 0) {
+                return; // Reserved internal maintenance command; not available to clients.
+
                 if(scheduleFlip==false){
                     std::vector<std::string> groupIds= groupContainer->GetUniqueGroupIds();
                     for (auto& groupId : groupIds) {
@@ -469,13 +479,13 @@ int main() {
                     scheduleFlip= true;
                 }
                 else{
-                    groupContainer->RemoveLDGroupMembers();
+                    // Keep offline members in their groups. WebSocket close handles presence.
                     groupContainer->DumpGroups();
                     scheduleFlip= false;
                 }
             }
             if (msg.rfind("subscribe:", 0) == 0) {
-                HandleSubscribeMessage(ws, msg.substr(10)); 
+                HandleSubscribeMessage(ws, msg); 
                 DumpTopicSubscription(perSocketData);
                 return;
             }
@@ -487,6 +497,8 @@ int main() {
             }
 
             FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
+            // Never trust the sender field supplied by the client.
+            ChatMsg.Sender = perSocketData->name;
             std::cout << TimeStamp() << "***** Parsed ChatMsg: " << ChatMsg.ChatType<<"|"<< ChatMsg.ChatCmdType <<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
 
             if (ChatMsg.ChatType=="Channel") {
@@ -529,18 +541,21 @@ int main() {
                 std::string Inviter=ChatMsg.Sender;
                 std::string Invited=ChatMsg.Recipient;
                 std::cout << TimeStamp() << "GroupInvite: " << ChatMsg.Sender << " inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
-                groupContainer->AddInvite(Inviter, Invited);
-
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
                     std::cout << "GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
                     GroupInfo info=groupContainer->GroupStartGroup(ChatMsg.Sender);
 
+                    if (info.errorCode != 0) return;
                     perSocketData->groupId=info.groupId;
                     SubscribeGroupTopic(ws);
                     DumpTopicSubscription(perSocketData);
                 } 
         
+                GroupInfo inviteCheck = groupContainer->GroupInvite(Invited, Inviter);
+                if (inviteCheck.errorCode != 1) return;
+                groupContainer->RemoveOldInvites();
+                groupContainer->AddInvite(Inviter, Invited);
                 // we must forward  this message to the tell_ topic channel
                 ChatMsg.ChatType="Tell";
                 std::string telltopic=ChatMsg.getTopicPrefix()+ToLower(Invited);
@@ -561,10 +576,14 @@ int main() {
                     std::cout << TimeStamp() << "GroupJoin: " << Inviter << " has not invited " << Invited << " to a group" <<std::endl;
                     return;
                 }
+                // Validate target group before leaving a solo group.
+                GroupInfo targetGroup = groupContainer->GetGroupInfo(Inviter);
+                if (targetGroup.groupId.empty() || targetGroup.memberCount >= groupContainer->MyMaxGroupMembers) return;
                 // Check if the sender is already in a group otherwise start one
                 GroupInfo info=groupContainer->GetGroupInfo(Invited);
                 if(info.memberCount==1){
                     //can leave group as I am solo in there and want to join other group
+                    RemoveGroupSubscription(ws);
                     groupContainer->GroupDisband(Invited);
                     perSocketData->groupId=""; 
                 }
@@ -574,8 +593,9 @@ int main() {
                     std::cout << TimeStamp() << "GroupJoin: Joining group. Got GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
                     GroupInfo info=groupContainer->GroupJoin(Invited, Inviter);
                     
+                    if (info.errorCode != 0 || info.groupId.empty()) return;
                     // New Group
-                    RemoveGroupSubscription(ws);
+                    if (info.errorCode != 0) return;
                     perSocketData->groupId=info.groupId;
                     SubscribeGroupTopic(ws);
                     DumpTopicSubscription(perSocketData);
@@ -670,8 +690,14 @@ int main() {
         .pong = [](auto */*ws*/, std::string_view ) {
             /* Not implemented yet */
         },
-        .close = [](auto */*ws*/, int /*code*/, std::string_view /*message*/) {
-            /* You may access ws->getUserData() here */
+        .close = [&app](auto *ws, int /*code*/, std::string_view /*message*/) {
+            auto* data = ws->getUserData();
+            if (!data->connected) return;
+            auto it = activeSessions.find(data->name);
+            if (it == activeSessions.end() || it->second != ws) return;
+            activeSessions.erase(it);
+            if (groupContainer->SetMemberOnline(data->name, false) && !data->groupId.empty())
+                SendGroupUpdateInfo(app, uWS::OpCode::TEXT, data->groupId);
         }
     }).listen(9020, [](auto *listen_s) {
         if (listen_s) {
