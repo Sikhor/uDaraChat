@@ -28,6 +28,12 @@ enum class EChatCmdType {
     GroupInfo,
     Alive,
     AliveInfo,
+    AdminStatus,
+    AdminGroups,
+    AdminZones,
+    AdminChannels,
+    AdminInfo,
+    AdminError,
     None
 };
 

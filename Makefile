@@ -17,7 +17,7 @@ LIBS = -lz -lssl -lcrypto
 CXXCLIENTFLAGS= -O0 -g -std=c++17 -I. 
 CLIENTLIBS = -pthread
 
-uDaraChatServer: uDaraChatServer.cpp JwtAuth.h ChatLibrary.o GroupContainer.o
+uDaraChatServer: uDaraChatServer.cpp JwtAuth.h AdminQueries.h ChatLibrary.h GroupContainer.h ChatLibrary.o GroupContainer.o
 	g++  $(CXXFLAGS) uDaraChatServer.cpp  ChatLibrary.o GroupContainer.o uWebSockets/uSockets/*.o $(LIBS) -o uDaraChatServer
 
 uDaraChatBot: uDaraChatBot.cpp BotWebsocket.h ChatLibrary.o Chatter.o
@@ -75,10 +75,12 @@ CheckServer:
 	fi
 
 .PHONY: test
-test: build/JwtAuthTest build/ChatLibraryTest build/GroupInvitationTest
+test: build/JwtAuthTest build/ChatLibraryTest build/GroupInvitationTest build/AdminQueriesTest
 	./build/JwtAuthTest
 	./build/ChatLibraryTest
 	./build/GroupInvitationTest
+	./build/AdminQueriesTest
+	python3 -m unittest discover -s tests -p 'test_admin_token.py' -v
 
 build/JwtAuthTest: tests/JwtAuthTest.cpp JwtAuth.h
 	mkdir -p build
@@ -103,3 +105,7 @@ build/ChatLibraryTest: tests/ChatLibraryTest.cpp ChatLibrary.cpp ChatLibrary.h
 build/GroupInvitationTest: tests/GroupInvitationTest.cpp GroupContainer.cpp GroupContainer.h ChatLibrary.h
 	mkdir -p build
 	$(CXX) $(CXXCLIENTFLAGS) tests/GroupInvitationTest.cpp GroupContainer.cpp -o $@
+
+build/AdminQueriesTest: tests/AdminQueriesTest.cpp AdminQueries.h ChatLibrary.cpp ChatLibrary.h GroupContainer.cpp GroupContainer.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) tests/AdminQueriesTest.cpp ChatLibrary.cpp GroupContainer.cpp -o $@

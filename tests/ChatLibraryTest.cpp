@@ -12,7 +12,9 @@ int main() {
             EChatCmdType::GroupJoinInfo, EChatCmdType::GroupDisband,
             EChatCmdType::GroupDisbandInfo, EChatCmdType::GroupKick,
             EChatCmdType::GroupKickInfo, EChatCmdType::GroupInfo,
-            EChatCmdType::Alive, EChatCmdType::AliveInfo}) {
+            EChatCmdType::Alive, EChatCmdType::AliveInfo, EChatCmdType::AdminStatus,
+            EChatCmdType::AdminGroups, EChatCmdType::AdminZones, EChatCmdType::AdminChannels,
+            EChatCmdType::AdminInfo, EChatCmdType::AdminError}) {
         const std::string frame = ChatCmdTypeToString(type) + ":Alice::text:with:colons::";
         assert(library.TryParseMessage(frame, msg, error));
         assert(msg.Type == type);

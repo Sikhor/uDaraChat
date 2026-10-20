@@ -1,3 +1,4 @@
+#include "AdminQueries.h"
 #include "App.h"
 #include "ChatLibrary.h"
 #include "GroupContainer.h"
@@ -45,10 +46,34 @@ struct PerSocketData {
     std::vector<TopicSlot> topics;
     int nr = 0;
 
+    bool isAdmin = false;
+    jwt::date adminExpiresAt{};
     bool connected = false;
 };
 using DaraSocket = uWS::WebSocket<true, true, PerSocketData>;
 std::unordered_map<std::string, DaraSocket*> activeSessions;
+
+const auto serverStarted = std::chrono::steady_clock::now();
+
+dara::AdminSnapshot CollectAdminSnapshot() {
+    dara::AdminSnapshot state;
+    state.uptimeSeconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - serverStarted).count();
+    state.connectedClients = activeSessions.size();
+    for (const auto& id : groupContainer->GetUniqueGroupIds())
+        state.groups.push_back(groupContainer->GetGroupInfoByGroupId(id));
+    for (const auto& session : activeSessions) {
+        const auto* data = session.second->getUserData();
+        ++state.zones[data->zone];
+        std::unordered_set<std::string> channels;
+        for (const auto& slot : data->topics)
+            if (slot.used && slot.topic.rfind("tell_", 0) != 0 &&
+                    slot.topic.rfind("group_", 0) != 0 && slot.topic.rfind("zone_", 0) != 0)
+                channels.insert(slot.topic);
+        for (const auto& channel : channels) ++state.channels[channel];
+    }
+    return state;
+}
 
 
 std::string TimeStamp()
@@ -99,6 +124,8 @@ bool HandleConnect(PerSocketData *data, const std::string& message,
     if (!login) return false;
     data->name = login->characterName;
     data->zone = login->zone;
+    data->isAdmin = login->isAdmin;
+    data->adminExpiresAt = login->expiresAt;
     data->connected = true;
     return true;
 }
@@ -520,6 +547,14 @@ int main() {
             if (!chatLibrary->TryParseMessage(msg, ChatMsg, parseError)) return;
             // Never trust the sender field supplied by the client.
             ChatMsg.Sender = perSocketData->name;
+            if (dara::IsAdminQuery(ChatMsg.Type) || ChatMsg.Type == EChatCmdType::AdminInfo ||
+                    ChatMsg.Type == EChatCmdType::AdminError) {
+                const auto reply = dara::AnswerAdminQuery(ChatMsg, perSocketData->isAdmin &&
+                    std::chrono::system_clock::now() < perSocketData->adminExpiresAt, CollectAdminSnapshot);
+                ws->send(reply.Serialize(), uWS::OpCode::TEXT);
+                return;
+            }
+
             std::cout << TimeStamp() << "***** Parsed ChatMsg: " << ChatCmdTypeToString(ChatMsg.Type) <<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Message << std::endl;
 
             if (ChatMsg.Type == EChatCmdType::Channel) {
@@ -545,6 +580,11 @@ int main() {
             }
             if (ChatMsg.Type == EChatCmdType::Tell) {
                 if(ChatMsg.Message.rfind("DEBUG", 0) == 0){
+                    if (!perSocketData->isAdmin || std::chrono::system_clock::now() >= perSocketData->adminExpiresAt) {
+                        ws->send(dara::AdminError(perSocketData->name, "Forbidden",
+                            "Administrator access required").Serialize(), uWS::OpCode::TEXT);
+                        return;
+                    }
                     std::cout << TimeStamp() << "DEBUG: Messages received: " << std::to_string(messageCount) << std::endl;
                     groupContainer->DumpGroups();
                     groupContainer->DumpInvites();

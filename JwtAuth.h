@@ -7,6 +7,8 @@
 namespace dara {
 constexpr int JwtTolerance = 30;
 struct AuthenticatedLogin {
+    bool isAdmin = false;
+    jwt::date expiresAt{};
     std::string characterName;
     std::string zone; // Client-supplied, not authenticated by JWT.
 };
@@ -78,7 +80,16 @@ inline std::optional<AuthenticatedLogin> VerifyLogin(
         auto name = token.get_payload_claim("characterName").as_string();
         if (name.empty()) return reject(stage);
         if (fields.at("name") != name) return reject("Login name does not exactly match verified JWT characterName (case-sensitive)");
-        return AuthenticatedLogin{name, fields["zone"]};
+        bool isAdmin = false;
+        if (token.has_payload_claim("roles")) {
+            stage = "Invalid JWT roles; expected an array of strings";
+            const auto roles = token.get_payload_claim("roles").as_array();
+            for (const auto& role : roles) {
+                if (!role.is<std::string>()) return reject(stage);
+                if (role.get<std::string>() == "chat_admin") isAdmin = true;
+            }
+        }
+        return AuthenticatedLogin{isAdmin, token.get_expires_at(), name, fields["zone"]};
     } catch (const std::exception&) {
         // Never expose library exceptions: they may contain credential data.
         return reject(stage);

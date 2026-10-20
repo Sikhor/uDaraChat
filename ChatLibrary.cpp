@@ -52,6 +52,12 @@ std::string ChatCmdTypeToString(EChatCmdType type) {
         case EChatCmdType::GroupInfo: return "GroupInfo";
         case EChatCmdType::Alive: return "Alive";
         case EChatCmdType::AliveInfo: return "AliveInfo";
+        case EChatCmdType::AdminStatus: return "AdminStatus";
+        case EChatCmdType::AdminGroups: return "AdminGroups";
+        case EChatCmdType::AdminZones: return "AdminZones";
+        case EChatCmdType::AdminChannels: return "AdminChannels";
+        case EChatCmdType::AdminInfo: return "AdminInfo";
+        case EChatCmdType::AdminError: return "AdminError";
         case EChatCmdType::None: return "None";
     }
     return "None";
@@ -73,6 +79,12 @@ EChatCmdType ChatCmdTypeFromString(const std::string& str) {
     if (str == "GroupInfo") return EChatCmdType::GroupInfo;
     if (str == "Alive") return EChatCmdType::Alive;
     if (str == "AliveInfo") return EChatCmdType::AliveInfo;
+    if (str == "AdminStatus") return EChatCmdType::AdminStatus;
+    if (str == "AdminGroups") return EChatCmdType::AdminGroups;
+    if (str == "AdminZones") return EChatCmdType::AdminZones;
+    if (str == "AdminChannels") return EChatCmdType::AdminChannels;
+    if (str == "AdminInfo") return EChatCmdType::AdminInfo;
+    if (str == "AdminError") return EChatCmdType::AdminError;
     if (str == "None") return EChatCmdType::None;
     return EChatCmdType::None;
 }

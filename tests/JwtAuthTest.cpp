@@ -21,6 +21,21 @@ int main() {
     auto valid = payload().sign(jwt::algorithm::hs256{secret});
     auto result = dara::VerifyLogin(login(valid), secret, now);
     check(result && result->characterName == "Alice" && result->zone == "Dungeon", "valid raw UTF-8 secret and character identity (sub=0)");
+    check(result && !result->isAdmin, "legacy player token has no admin access");
+    auto adminToken = payload().set_payload_claim("roles", jwt::claim(picojson::array{
+        picojson::value(std::string("player")), picojson::value(std::string("chat_admin"))})).sign(jwt::algorithm::hs256{secret});
+    auto admin = dara::VerifyLogin(login(adminToken), secret, now);
+    check(admin && admin->isAdmin && admin->expiresAt == now + std::chrono::seconds(1800), "signed admin role and expiry recognized");
+    check(!dara::VerifyLogin(login(adminToken), "wrong", now), "forged admin signature rejected");
+    auto player = dara::VerifyLogin(login(payload().set_payload_claim("roles", jwt::claim(picojson::array{
+        picojson::value(std::string("player"))})).sign(jwt::algorithm::hs256{secret})), secret, now);
+    check(player && !player->isAdmin, "other roles do not grant admin");
+    auto spoof = dara::VerifyLogin(login(valid) + ";roles=chat_admin", secret, now);
+    check(spoof && !spoof->isAdmin, "login fields cannot grant admin");
+    for (const auto& malformed : {picojson::value(std::string("chat_admin")),
+            picojson::value(true), picojson::value(picojson::array{picojson::value(true)})})
+        check(!dara::VerifyLogin(login(payload().set_payload_claim("roles", jwt::claim(malformed)).sign(
+            jwt::algorithm::hs256{secret})), secret, now), "malformed roles rejected");
     check(dara::VerifyLogin("connect:pass=" + valid + ";name=Alice", secret, now).has_value(), "field order independent");
     check(!dara::VerifyLogin(login(valid, "alice"), secret, now), "exact name match");
     check(!dara::VerifyLogin(login(valid), "wrong", now), "wrong signature");

@@ -161,7 +161,11 @@ public:
 
       message.Sender = chatter.MyCharName;
       message.Recipient = target;
-      if (action == "world" || action == "group") {
+      if (action == "admin-status") message.Type = EChatCmdType::AdminStatus;
+      else if (action == "admin-groups") message.Type = EChatCmdType::AdminGroups;
+      else if (action == "admin-zones") message.Type = EChatCmdType::AdminZones;
+      else if (action == "admin-channels") message.Type = EChatCmdType::AdminChannels;
+      else if (action == "world" || action == "group") {
           const auto text = command.find_first_not_of(" ", command.find(' ') == std::string::npos ? command.size() : command.find(' '));
           if (text == std::string::npos) { std::cerr << action << " requires a message" << std::endl; return; }
           message.Type = action == "world" ? EChatCmdType::Channel : EChatCmdType::Group;
@@ -172,7 +176,7 @@ public:
       else if (action == "invite" && !target.empty()) message.Type = EChatCmdType::GroupInvite;
       else if (action == "kick" && !target.empty()) message.Type = EChatCmdType::GroupKick;
       else if (action == "leave") { message.Type = EChatCmdType::GroupDisband; message.Recipient.clear(); }
-      else { std::cerr << "Control command: world <message>, group <message>, invite <name>, kick <name>, leave, quit" << std::endl; return; }
+      else { std::cerr << "Control command: world <message>, group <message>, invite <name>, kick <name>, leave, admin-status, admin-groups, admin-zones, admin-channels, quit" << std::endl; return; }
       const std::string frame = message.Serialize();
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)frame.data(), frame.size());
       std::cout << "CONTROL SENT " << action << " " << target << std::endl;
@@ -470,7 +474,7 @@ void SyntaxFailure()
   std::cout << "Help:" << std::endl;
     std::cout << "uDaraChatBot --mode <mode> --name <JWT characterName> [--token <JWT>] --recipient <recipient> --sleep <seconds>" << std::endl;
     std::cout << "   Use --token <JWT> or set DARA_CHAT_JWT_TOKEN; --token takes precedence." << std::endl;
-    std::cout << "   controlled - accept invite/kick/leave/quit commands on stdin" << std::endl;
+    std::cout << "   controlled - accept chat, invite/kick/leave, admin-status/admin-groups/admin-zones/admin-channels and quit commands on stdin" << std::endl;
     std::cout << "   available modes:" << std::endl;
     std::cout << "   1.) silent - do not send messages" << std::endl;
     std::cout << "   2.) chatting - random Messages to world and everywhere" << std::endl;

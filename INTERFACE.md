@@ -383,3 +383,10 @@ const ws = await startChat("wss://<server>:9020/", "Alice", "Dungeon", jwtFromGa
 - [GroupContainer.cpp](GroupContainer.cpp): Groups, invitations, online status, and GroupInfo.
 - [ChatLibrary.h](ChatLibrary.h): Message types, structures, and configured server address.
 - [Chatter.cpp](Chatter.cpp): Example bot messages.
+
+## Administrator queries
+
+`AdminStatus`, `AdminGroups`, `AdminZones`, and `AdminChannels` require the signed
+`chat_admin` JWT role and return direct `AdminInfo` or `AdminError` responses.
+See [Remote administration](docs/ADMIN.md) for authorization, examples, and console usage.
+The legacy `Tell`/`DEBUG` diagnostic also requires administrator permission.

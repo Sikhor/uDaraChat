@@ -87,3 +87,9 @@ and test leave, kick, disconnect and reconnect behavior:
 ```sh
 python3 tools/group_test_controller.py --unreal-character YourCharacter
 ```
+
+## Remote administration
+
+See the [administrator guide](docs/ADMIN.md) for JWT roles, issuing administrator
+tokens, and querying connected clients, groups, zones, and channels from outside
+the server using the interactive console. Existing player JWTs remain supported.
