@@ -14,6 +14,7 @@
 #include <openssl/sha.h>
 #include <sstream>
 #include <iomanip>
+#include <poll.h>
 
 #define SLEEPSECONDS 3000
 
@@ -67,7 +68,7 @@ public:
       chatter.AddChatPartner(Recipient);
     }
     
-    // Login and subscribe before allowing polling callbacks to send replies.
+    // Login and subscriptions share the polling mutex.
     {
     std::lock_guard<std::mutex> lock(mtx);
     std::string msg = "connect:name=" + GivenName + ";zone=" + chatter.MyZoneName + ";group=;pass=" + token;
@@ -83,10 +84,22 @@ public:
     
     
 
+    if (mode == "controlled") std::cout << "CONTROL READY" << std::endl;
     while (running.load(std::memory_order_relaxed) && wsclient.isConnected()) {
-        std::this_thread::sleep_for(std::chrono::seconds(SleepSeconds));
-        std::lock_guard<std::mutex> lock(mtx);
-        if (wsclient.isConnected()) ChatLoop(mode);
+        if (mode == "controlled") {
+            pollfd input{STDIN_FILENO, POLLIN, 0};
+            const int ready = ::poll(&input, 1, 100);
+            if (ready > 0 && (input.revents & (POLLIN | POLLHUP))) {
+                std::string command;
+                if (!std::getline(std::cin, command)) { stop(); break; }
+                std::lock_guard<std::mutex> lock(mtx);
+                if (wsclient.isConnected()) ControlCommand(command);
+            }
+        } else {
+            std::this_thread::sleep_for(std::chrono::seconds(SleepSeconds));
+            std::lock_guard<std::mutex> lock(mtx);
+            if (wsclient.isConnected()) ChatLoop(mode);
+        }
     }
     stop();
 
@@ -137,6 +150,32 @@ private:
   std::atomic<bool> running;
 
 public:
+  void ControlCommand(const std::string& command) {
+      std::istringstream input(command);
+      std::string action, target;
+      input >> action >> target;
+      if (action == "quit") { stop(); return; }
+      FDaraChatMsg message;
+      message.ChatType = "Cmd";
+      message.Sender = chatter.MyCharName;
+      message.Recipient = target;
+      if (action == "world") {
+          const auto text = command.find_first_not_of(" ", command.find(' ') == std::string::npos ? command.size() : command.find(' '));
+          if (text == std::string::npos) { std::cerr << "world requires a message" << std::endl; return; }
+          message.ChatType = "Channel";
+          message.ChatCmdType = "None";
+          message.Recipient = "World";
+          message.Msg = command.substr(text);
+      }
+      else if (action == "invite" && !target.empty()) message.ChatCmdType = "GroupInvite";
+      else if (action == "kick" && !target.empty()) message.ChatCmdType = "GroupKick";
+      else if (action == "leave") message.ChatCmdType = "GroupDisband";
+      else { std::cerr << "Control command: world <message>, invite <name>, kick <name>, leave, quit" << std::endl; return; }
+      const std::string frame = message.SerializeToSend();
+      wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)frame.data(), frame.size());
+      std::cout << "CONTROL SENT " << action << " " << target << std::endl;
+  }
+
   void ChatReply(FDaraChatMsg ChatMsg)
   {
       if(ChatMsg.ChatCmdType=="GroupInvite"){
@@ -429,6 +468,7 @@ void SyntaxFailure()
   std::cout << "Help:" << std::endl;
     std::cout << "uDaraChatBot --mode <mode> --name <JWT characterName> [--token <JWT>] --recipient <recipient> --sleep <seconds>" << std::endl;
     std::cout << "   Use --token <JWT> or set DARA_CHAT_JWT_TOKEN; --token takes precedence." << std::endl;
+    std::cout << "   controlled - accept invite/kick/leave/quit commands on stdin" << std::endl;
     std::cout << "   available modes:" << std::endl;
     std::cout << "   1.) silent - do not send messages" << std::endl;
     std::cout << "   2.) chatting - random Messages to world and everywhere" << std::endl;
@@ -497,7 +537,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-  if (!mode.empty() && mode != "silent" && mode != "chatting" && mode != "inviting" && mode != "schedule" && mode != "groupmember" && mode != "groupleader" && mode != "pingpong"&& mode != "grouptests") {
+  if (!mode.empty() && mode != "controlled" && mode != "silent" && mode != "chatting" && mode != "inviting" && mode != "schedule" && mode != "groupmember" && mode != "groupleader" && mode != "pingpong"&& mode != "grouptests") {
       std::cout << "Invalid mode. Available modes: silent, chatting, inviting, schedule, groupmember, groupleader, pingpong" << std::endl;
       return 1;
   }

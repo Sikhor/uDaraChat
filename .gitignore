@@ -45,3 +45,6 @@ uWebSockets/
 uDaraChat.code-workspace
 .vscode/settings.json
 .vscode/tasks.json
+
+# Python controller/test caches
+__pycache__/

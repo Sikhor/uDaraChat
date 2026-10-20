@@ -60,3 +60,15 @@ test: build/JwtAuthTest
 build/JwtAuthTest: tests/JwtAuthTest.cpp JwtAuth.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) tests/JwtAuthTest.cpp -lssl -lcrypto -o $@
+
+.PHONY: test-controller
+test-controller:
+	python3 -m unittest discover -s tests -p 'test_group_controller.py' -v
+
+.PHONY: test-bot-transport
+test-bot-transport: build/BotTransportTest
+	./build/BotTransportTest
+
+build/BotTransportTest: tests/BotTransportTest.cpp BotWebsocket.h
+	mkdir -p build
+	$(CXX) $(CXXCLIENTFLAGS) tests/BotTransportTest.cpp -lssl -lcrypto -o $@

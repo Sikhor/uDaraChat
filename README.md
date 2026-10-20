@@ -77,3 +77,13 @@ Certbot preserves private-key group ownership and group mode on renewal. Use a
 Certbot deploy hook to restart the chat service after successful renewal: this
 server loads certificates only at startup. Any directory access rules must cover
 future archive files as well as the current ones.
+
+## Group testing with bots and Unreal
+
+Use the [group test controller guide](docs/GROUP_TEST_CONTROLLER.md) to start six
+JWT-authenticated bots, run group invitation scenarios with your Unreal character,
+and test leave, kick, disconnect and reconnect behavior:
+
+```sh
+python3 tools/group_test_controller.py --unreal-character YourCharacter
+```

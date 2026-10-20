@@ -104,15 +104,29 @@ public:
   }
 
   bool write(const uint8_t* data, uint32_t size, bool more = false) {
+    // Empty WebSocket control frames have a header but no payload. OpenSSL
+    // does not treat a zero-byte SSL_write as a successful application write.
+    if (size == 0) return true;
+    if (!isConnected()) return false;
     int flags = MSG_NOSIGNAL;
     if (more) flags |= MSG_MORE;
     do {
 #ifdef DARA_WEBSOCKET_TLS
+      ERR_clear_error();
+      errno = 0;
       int sent = SSL_write(tls_, data, static_cast<int>(size));
       if (sent <= 0) {
+        const int saved_errno = errno;
         int error = SSL_get_error(tls_, sent);
         if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) continue;
-        close("TLS send failed");
+        char detail[768];
+        char openssl_error[256] = "no OpenSSL detail available";
+        const unsigned long code = ERR_get_error();
+        if (code) ERR_error_string_n(code, openssl_error, sizeof(openssl_error));
+        snprintf(detail, sizeof(detail), "TLS send failed (SSL error %d): %s%s%s",
+                 error, openssl_error, saved_errno ? "; system error: " : "",
+                 saved_errno ? strerror(saved_errno) : "");
+        close(detail);
         return false;
       }
 #else
@@ -134,11 +148,25 @@ public:
   template<typename Handler>
   bool read(Handler handler) {
 #ifdef DARA_WEBSOCKET_TLS
+    ERR_clear_error();
+    errno = 0;
     int ret = SSL_read(tls_, recvbuf_ + tail_, static_cast<int>(RecvBufSize - tail_));
     if (ret <= 0) {
+      const int saved_errno = errno;
       int error = SSL_get_error(tls_, ret);
       if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) return false;
-      close("TLS read closed or failed");
+      if (error == SSL_ERROR_ZERO_RETURN) {
+        close("TLS peer closed the connection (close_notify) without a WebSocket close frame");
+      } else {
+        char detail[768];
+        char openssl_error[256] = "no OpenSSL detail available";
+        const unsigned long code = ERR_get_error();
+        if (code) ERR_error_string_n(code, openssl_error, sizeof(openssl_error));
+        snprintf(detail, sizeof(detail), "TLS read failed (SSL error %d): %s%s%s; check server logs for timeout, restart or network closure",
+                 error, openssl_error, saved_errno ? "; system error: " : "",
+                 saved_errno ? strerror(saved_errno) : "");
+        close(detail);
+      }
       return false;
     }
 #else
@@ -396,8 +424,8 @@ public:
       *(uint32_t*)(h + h_len) = 0;
       h_len += 4;
     }
-    conn.write(h, h_len, true);
-    conn.write(payload, pl_len, false);
+    if (!conn.write(h, h_len, true)) return;
+    if (pl_len != 0) conn.write(payload, pl_len, false);
   }
 
   // clean close the connection with optional status_code and reason
@@ -426,7 +454,25 @@ protected:
   }
 
   uint32_t handleWSMsg(EventHandler* handler, uint8_t* data, uint32_t size) {
-    // we might read a little more bytes beyond size, which is okey
+    // One TLS read can contain multiple WebSocket frames. Drain every complete
+    // frame now: leaving a ping buffered until the next network read can cause
+    // the server to time out while waiting for its pong.
+    while (size) {
+      const bool closing = (data[0] & 15) == OPCODE_CLOSE;
+      const uint32_t remaining = handleOneWSMsg(handler, data, size);
+      if (remaining == size) return size; // incomplete frame
+      if (closing) return 0;
+      data += size - remaining;
+      size = remaining;
+    }
+    return 0;
+  }
+
+  uint32_t handleOneWSMsg(EventHandler* handler, uint8_t* data, uint32_t size) {
+    if (size < 2) return size;
+    const uint32_t extended = (data[1] & 127) == 126 ? 2 : ((data[1] & 127) == 127 ? 8 : 0);
+    const uint32_t header = 2 + extended + ((data[1] & 128) ? 4 : 0);
+    if (size < header) return size;
     const uint8_t* data_end = data + size;
     uint8_t opcode = data[0] & 15;
     bool beg = opcode != OPCODE_CONT, fin = data[0] >> 7; //, control = opcode >> 3;
