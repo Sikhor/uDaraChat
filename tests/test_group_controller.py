@@ -87,6 +87,22 @@ for line in sys.stdin:
         self.controller.close()
         self.assertTrue(all(p.poll() is not None for p in self.controller.processes.values()))
 
+    def test_group_greeting_waits_for_own_roster_and_deduplicates(self):
+        c = self.controller
+        c.start('TestBot01')
+        roster = 'Received:GroupInfo:GroupAdmin::group_abc;TestBot01;1;2;0;TestBot01,1;TestBot02,1'
+        with patch.object(c, 'send') as send:
+            c.observe_group('TestBot02', roster)
+            send.assert_not_called()
+            c.observe_group('TestBot01', roster)
+            send.assert_called_once_with('TestBot01', 'group Hey, I am here! TestBot01 is ready to rock!')
+            c.observe_group('TestBot01', roster)
+            self.assertEqual(send.call_count, 1)
+            c.observe_group('TestBot01', 'CONTROL SENT leave ')
+            c.observe_group('TestBot01', roster)
+            self.assertEqual(send.call_count, 2)
+        self.assertEqual(len(set(module.GROUP_GREETINGS)), 6)
+
     def test_group_display_and_roster_changes(self):
         import io
         c = self.controller

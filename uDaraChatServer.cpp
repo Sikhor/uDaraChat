@@ -601,6 +601,7 @@ int main() {
                 if (targetGroup.groupId.empty() || targetGroup.memberCount >= groupContainer->MyMaxGroupMembers) return;
                 // Check if the sender is already in a group otherwise start one
                 GroupInfo info=groupContainer->GetGroupInfo(Invited);
+                if (!info.groupId.empty() && info.groupId == targetGroup.groupId) return;
                 if(info.memberCount==1){
                     //can leave group as I am solo in there and want to join other group
                     RemoveGroupSubscription(ws);

@@ -161,18 +161,18 @@ public:
 
       message.Sender = chatter.MyCharName;
       message.Recipient = target;
-      if (action == "world") {
+      if (action == "world" || action == "group") {
           const auto text = command.find_first_not_of(" ", command.find(' ') == std::string::npos ? command.size() : command.find(' '));
-          if (text == std::string::npos) { std::cerr << "world requires a message" << std::endl; return; }
-          message.Type = EChatCmdType::Channel;
+          if (text == std::string::npos) { std::cerr << action << " requires a message" << std::endl; return; }
+          message.Type = action == "world" ? EChatCmdType::Channel : EChatCmdType::Group;
 
-          message.Recipient = "World";
+          message.Recipient = action == "world" ? "World" : "";
           message.Message = command.substr(text);
       }
       else if (action == "invite" && !target.empty()) message.Type = EChatCmdType::GroupInvite;
       else if (action == "kick" && !target.empty()) message.Type = EChatCmdType::GroupKick;
       else if (action == "leave") { message.Type = EChatCmdType::GroupDisband; message.Recipient.clear(); }
-      else { std::cerr << "Control command: world <message>, invite <name>, kick <name>, leave, quit" << std::endl; return; }
+      else { std::cerr << "Control command: world <message>, group <message>, invite <name>, kick <name>, leave, quit" << std::endl; return; }
       const std::string frame = message.Serialize();
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)frame.data(), frame.size());
       std::cout << "CONTROL SENT " << action << " " << target << std::endl;

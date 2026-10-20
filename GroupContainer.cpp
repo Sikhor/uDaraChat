@@ -183,17 +183,16 @@ GroupInfo GroupContainer::GroupInvite(const std::string& memberName, const std::
         LeaderInfo.errorCode= DARAGROUPISNOTLEADER;
         return LeaderInfo;
     }
-    if(MemberInfo.groupId!=""){   
+    if(!MemberInfo.groupId.empty() && MemberInfo.groupId==LeaderInfo.groupId){
+        MemberInfo.errorCode= DARAGROUPISALREADYINGROUP;
+        return MemberInfo;
+    }
+    // A solo group may be replaced when the invitation is accepted.
+    // Keep its membership intact while the invitation is pending.
+    if(!MemberInfo.groupId.empty() && MemberInfo.memberCount > 1){
         MemberInfo.errorCode= DARAGROUPISINANOTHERGROUP;
         MemberInfo.groupId="";
         MemberInfo.memberCount=0;
-        return MemberInfo;
-    }
-    if(!MemberInfo.groupId.empty() && MemberInfo.groupId==LeaderInfo.groupId){   
-        MemberInfo.errorCode= DARAGROUPISALREADYINGROUP;
-        MemberInfo.groupId="";
-        MemberInfo.memberCount=0;
-
         return MemberInfo;
     }
 
@@ -244,6 +243,14 @@ GroupInfo GroupContainer::GroupDisband(const std::string& memberName)
     GroupInfo MemberInfo;
     MemberInfo= GetGroupInfo(memberName);
     const bool wasLeader = MemberInfo.leaderName == memberName;
+    if (MemberInfo.memberCount == 1) {
+        // Invitations from this now-defunct solo group must not follow its
+        // former leader into a different group.
+        MyInvites.erase(std::remove_if(MyInvites.begin(), MyInvites.end(),
+            [&](const GroupInviteData& invite) {
+                return invite.leaderName == memberName;
+            }), MyInvites.end());
+    }
     // Use remove-erase idiom to remove all matching members
     MyGroups.erase(
         std::remove_if(MyGroups.begin(), MyGroups.end(),

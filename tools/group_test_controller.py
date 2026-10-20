@@ -22,6 +22,16 @@ GREETINGS = (
 )
 
 
+GROUP_GREETINGS = (
+    "Hey, I am here! {name} is ready to rock!",
+    "{name} reporting for adventure! Let's turn monsters into loot!",
+    "Party time! {name} brought courage, snacks, and questionable tactics!",
+    "Backup has arrived! {name} is ready to roll. Who needs a hero?",
+    "{name} joined the crew! Boots laced, weapons ready, let's rock!",
+    "Save some loot for me! {name} is here and ready for trouble!",
+)
+
+
 def load_generator(path):
     spec = importlib.util.spec_from_file_location('dara_token_generator', path)
     module = importlib.util.module_from_spec(spec)
@@ -39,11 +49,14 @@ class Controller:
         self.threads = []
         self.group_lock = threading.Lock()
         self.groups = {name: None for name in self.names}
+        self.greeted_groups = {}
         args.log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     def start(self, name):
         if name in self.processes and self.processes[name].poll() is None:
             raise ValueError(f'{name} is already running')
+        with self.group_lock:
+            self.greeted_groups.pop(name, None)
         token = self.generate(self.secret, name, self.args.days)
         env = dict(os.environ)
         # Never pass the signing secret to child bots.
@@ -106,16 +119,27 @@ class Controller:
                     any(len(entry) != 2 or entry[1] not in ('0', '1') for entry in members)):
                 return
             names = {entry[0] for entry in members}
+            greet = False
             with self.group_lock:
                 for bot in self.names:
                     if bot in names:
                         self.groups[bot] = group_id
                     elif self.groups[bot] == group_id:
                         self.groups[bot] = ''
+                        self.greeted_groups.pop(bot, None)
+                proc = self.processes.get(name)
+                if (name in names and proc is not None and proc.poll() is None and
+                        self.greeted_groups.get(name) != group_id):
+                    self.greeted_groups[name] = group_id
+                    greet = True
+            if greet:
+                greeting = GROUP_GREETINGS[self.names.index(name)].format(name=name)
+                self.send(name, 'group ' + greeting)
         elif line.startswith('CONTROL SENT leave'):
             # A sent command is not a server acknowledgement.
             with self.group_lock:
                 self.groups[name] = None
+                self.greeted_groups.pop(name, None)
         elif line.startswith('Received:GroupDisbandInfo:'):
             fields = line.split(':', 4)
             if len(fields) == 5 and fields[4] == 'left the group':
@@ -124,6 +148,7 @@ class Controller:
                     if (departed in self.groups and self.groups[name] and
                             self.groups[departed] == self.groups[name]):
                         self.groups[departed] = ''
+                        self.greeted_groups.pop(departed, None)
 
     def show_groups(self):
         with self.group_lock:

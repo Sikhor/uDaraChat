@@ -139,3 +139,7 @@ update showed the bot leaving its known group; `unknown` means no confirmed upda
 is available (including after sending a leave request). A stopped bot can still
 belong to its cached group. This command displays cached observations; it does not
 query the server or assume that sending an invitation succeeded.
+
+Bots send a distinct greeting into group chat when their own server roster update
+confirms membership. Repeated roster updates do not repeat the greeting; leaving
+and joining again allows another greeting. This applies to all controller scenarios.

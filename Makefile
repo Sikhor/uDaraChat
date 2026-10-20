@@ -75,9 +75,10 @@ CheckServer:
 	fi
 
 .PHONY: test
-test: build/JwtAuthTest build/ChatLibraryTest
+test: build/JwtAuthTest build/ChatLibraryTest build/GroupInvitationTest
 	./build/JwtAuthTest
 	./build/ChatLibraryTest
+	./build/GroupInvitationTest
 
 build/JwtAuthTest: tests/JwtAuthTest.cpp JwtAuth.h
 	mkdir -p build
@@ -98,3 +99,7 @@ build/BotTransportTest: tests/BotTransportTest.cpp BotWebsocket.h
 build/ChatLibraryTest: tests/ChatLibraryTest.cpp ChatLibrary.cpp ChatLibrary.h
 	mkdir -p build
 	$(CXX) $(CXXCLIENTFLAGS) tests/ChatLibraryTest.cpp ChatLibrary.cpp -o $@
+
+build/GroupInvitationTest: tests/GroupInvitationTest.cpp GroupContainer.cpp GroupContainer.h ChatLibrary.h
+	mkdir -p build
+	$(CXX) $(CXXCLIENTFLAGS) tests/GroupInvitationTest.cpp GroupContainer.cpp -o $@

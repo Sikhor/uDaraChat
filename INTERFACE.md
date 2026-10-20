@@ -170,8 +170,8 @@ GroupInvite:Alice:Bob:
 
 If Alice is not already in a group, the server creates one with Alice as its
 leader and subscribes her to its topic. In existing groups, only the leader can
-invite members. The invited character must not belong to any group at the time
-of the invitation. Bob receives this message through his private channel:
+invite members. The invited character may be ungrouped or in a one-member group. Characters
+in groups with multiple members cannot be invited into another group. Bob receives this message through his private channel:
 
 ```text
 GroupInvite:Alice:Bob:
@@ -195,8 +195,8 @@ its capacity. On success, Bob automatically subscribes to the group topic, the
 invitation is removed, and `GroupInfo` is sent to the entire group.
 A character belonging to another group with more than one member cannot join.
 A character's own one-person group can be left automatically during joining if
-a valid invitation already exists. However, a new invitation to someone in a
-one-person group is also rejected.
+a valid invitation already exists. The old solo group remains intact until acceptance; removing it also cancels
+invitations issued from that old group.
 
 ### Leaving a group
 
