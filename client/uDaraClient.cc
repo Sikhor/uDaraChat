@@ -117,10 +117,10 @@ public:
   void SendRandomMessage()
   {
 	  FDaraChatMsg ChatMsg;
-	  ChatMsg.ChatType= "World";
+	  ChatMsg.Type = EChatCmdType::Channel;
 	  ChatMsg.Sender= MyCharName;
 	  ChatMsg.Recipient= "World";
-	  ChatMsg.Msg= GetRandomMessage();
+	  ChatMsg.Message= GetRandomMessage();
 	  SendAChatMsg(ChatMsg);
   }
 
@@ -134,10 +134,10 @@ public:
     }
     if(count==3){
       FDaraChatMsg ChatMsg;
-	    ChatMsg.ChatType= "GroupInvite";
+	    ChatMsg.Type = EChatCmdType::GroupInvite;
 	    ChatMsg.Sender= MyCharName;
 	    ChatMsg.Recipient= "MeMercenary";
-	    ChatMsg.Msg= MyGroupId;
+	    ChatMsg.Message = "";
 	    SendAChatMsg(ChatMsg);
     } 
     return;
@@ -153,10 +153,10 @@ public:
     }
     if(count==5){
       FDaraChatMsg ChatMsg;
-	    ChatMsg.ChatType= "Zone";
+	    ChatMsg.Type = EChatCmdType::Zone;
 	    ChatMsg.Sender= MyCharName;
-	    ChatMsg.Recipient= MyZoneName;
-	    ChatMsg.Msg= "Talking to Zone: "+GetRandomMessage();
+	    ChatMsg.Recipient = "";
+	    ChatMsg.Message= "Talking to Zone: "+GetRandomMessage();
 	    SendAChatMsg(ChatMsg);
     } 
     return;
@@ -172,10 +172,10 @@ public:
     }
     if(count==5){
       FDaraChatMsg ChatMsg;
-	    ChatMsg.ChatType= "Tell";
+	    ChatMsg.Type = EChatCmdType::Tell;
 	    ChatMsg.Sender= MyCharName;
 	    ChatMsg.Recipient= "MeMercenary";
-	    ChatMsg.Msg= GetRandomMessage();
+	    ChatMsg.Message= GetRandomMessage();
 	    SendAChatMsg(ChatMsg);
     } 
     return;
@@ -183,12 +183,12 @@ public:
 
   void SendAChatMsg(FDaraChatMsg ChatMsg)
   {
-      std::string msg="publish:"+ ChatMsg.Recipient+ ":"+ ChatMsg.ChatType+ ":" + ChatMsg.Sender+":" + ChatMsg.Msg;
+      std::string msg = ChatMsg.Serialize();
       if(DEBUGMODE>9){
-        std::cout << MyCharName << ": " << ChatMsg.Msg << std::endl;
+        std::cout << MyCharName << ": " << ChatMsg.Message << std::endl;
       }
       if(DEBUGMODE>0){
-        std::cout << ChatMsg.Sender<<": " << ChatMsg.Msg << std::endl;
+        std::cout << ChatMsg.Sender<<": " << ChatMsg.Message << std::endl;
       }
       SendAMessage(msg);
   }

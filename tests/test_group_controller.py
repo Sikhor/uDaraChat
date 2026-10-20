@@ -90,13 +90,15 @@ for line in sys.stdin:
     def test_group_display_and_roster_changes(self):
         import io
         c = self.controller
-        c.observe_group('TestBot01', 'Received:Cmd:GroupInfo:GroupAdmin:group_abc;TestBot01;1;2;0;TestBot01,1;TestBot02,1')
+        c.observe_group('TestBot01', 'Received:GroupInfo:GroupAdmin::group_abc;TestBot01;1;2;0;TestBot01,1;TestBot02,1')
         self.assertEqual(c.groups['TestBot01'], 'group_abc')
         self.assertEqual(c.groups['TestBot02'], 'group_abc')
         self.assertIsNone(c.groups['TestBot03'])
-        c.observe_group('TestBot01', 'Received:Cmd:GroupInfo:GroupAdmin:group_abc;TestBot01;1;1;0;TestBot01,1')
+        c.observe_group('TestBot01', 'Received:GroupDisbandInfo:TestBot02::left the group')
         self.assertEqual(c.groups['TestBot02'], '')
-        c.observe_group('TestBot01', 'Received:Cmd:GroupInfo:GroupAdmin:bad;leader;1;2;0;TestBot01,1')
+        c.observe_group('TestBot01', 'Received:GroupInfo:GroupAdmin::group_abc;TestBot01;1;1;0;TestBot01,1')
+        self.assertEqual(c.groups['TestBot02'], '')
+        c.observe_group('TestBot01', 'Received:GroupInfo:GroupAdmin::bad;leader;1;2;0;TestBot01,1')
         self.assertEqual(c.groups['TestBot01'], 'group_abc')
         out = io.StringIO()
         with patch('sys.stdout', out):

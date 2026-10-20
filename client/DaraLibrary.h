@@ -9,11 +9,4 @@
 #include <chrono>
 
 
-struct FDaraChatMsg
-{
-    std::string ChatType;
-    std::string Sender;
-    std::string Recipient;
-    std::string Msg;
-};
-
+#include "../ChatLibrary.h"

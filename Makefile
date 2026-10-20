@@ -3,6 +3,11 @@ all: uDaraChatServer uDaraChatBot
 clean:
 	rm -f uDaraChatServer uDaraChatBot *.o
 
+.PHONY: LogClean
+LogClean:
+	@if [ -d log ]; then find log -type f -delete; fi
+	@if [ -d log ]; then find log -mindepth 1 -maxdepth 1 -type d -name 'group-test-*' -exec rm -rf -- {} +; fi
+
 run: uDaraChatServer uDaraChatBot
 	@sh scripts/with-jwt-secret.sh ./uDaraChatServer
 
@@ -26,11 +31,27 @@ ChatLibrary.o: ChatLibrary.cpp ChatLibrary.h
 GroupContainer.o: GroupContainer.cpp GroupContainer.h
 	g++  $(CXXFLAGS) -c GroupContainer.cpp
 
-Chatter.o: Chatter.cpp Chatter.h
+Chatter.o: Chatter.cpp Chatter.h ChatLibrary.h
 	g++  $(CXXCLIENTFLAGS) -c Chatter.cpp
 
 
-.PHONY: StartServer CheckServer
+.PHONY: StartServer StopServer CheckServer StartTest
+
+StartTest: uDaraChatBot
+	python3 tools/group_test_controller.py --unreal-character MeRobot
+
+StopServer:
+	@if pkill -TERM -x uDaraChatServer; then \
+		echo "Sent termination signal to uDaraChatServer"; \
+	else \
+		status=$$?; \
+		if [ "$$status" -eq 1 ]; then \
+			echo "uDaraChatServer is NOT running"; \
+		else \
+			echo "Failed to stop uDaraChatServer" >&2; \
+			exit "$$status"; \
+		fi; \
+	fi
 
 StartServer: uDaraChatServer
 	@if pgrep -x uDaraChatServer > /dev/null; then \
@@ -54,8 +75,9 @@ CheckServer:
 	fi
 
 .PHONY: test
-test: build/JwtAuthTest
+test: build/JwtAuthTest build/ChatLibraryTest
 	./build/JwtAuthTest
+	./build/ChatLibraryTest
 
 build/JwtAuthTest: tests/JwtAuthTest.cpp JwtAuth.h
 	mkdir -p build
@@ -72,3 +94,7 @@ test-bot-transport: build/BotTransportTest
 build/BotTransportTest: tests/BotTransportTest.cpp BotWebsocket.h
 	mkdir -p build
 	$(CXX) $(CXXCLIENTFLAGS) tests/BotTransportTest.cpp -lssl -lcrypto -o $@
+
+build/ChatLibraryTest: tests/ChatLibraryTest.cpp ChatLibrary.cpp ChatLibrary.h
+	mkdir -p build
+	$(CXX) $(CXXCLIENTFLAGS) tests/ChatLibraryTest.cpp ChatLibrary.cpp -o $@

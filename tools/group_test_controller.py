@@ -91,7 +91,7 @@ class Controller:
         self.send(name, 'world ' + greeting)
 
     def observe_group(self, name, line):
-        prefix = 'Received:Cmd:GroupInfo:GroupAdmin:'
+        prefix = 'Received:GroupInfo:GroupAdmin::'
         if line.startswith(prefix):
             fields = line[len(prefix):].split(';')
             if len(fields) < 5:
@@ -116,9 +116,9 @@ class Controller:
             # A sent command is not a server acknowledgement.
             with self.group_lock:
                 self.groups[name] = None
-        elif line.startswith('Received:Group:'):
-            fields = line.split(':', 3)
-            if len(fields) == 4 and fields[3] == 'left the group':
+        elif line.startswith('Received:GroupDisbandInfo:'):
+            fields = line.split(':', 4)
+            if len(fields) == 5 and fields[4] == 'left the group':
                 departed = fields[2]
                 with self.group_lock:
                     if (departed in self.groups and self.groups[name] and

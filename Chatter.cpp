@@ -1,6 +1,6 @@
 #include "Chatter.h"
 
-std::string Chatter::GetRandomMessage() 
+std::string Chatter::GetRandomMessage()
 {
       static std::vector<std::string> messages = {
         "Why do you think Dara is that corrupted?",
@@ -46,7 +46,7 @@ std::string Chatter::GetRandomMessage()
         return GetRandomMessage(messages);
 }
 
-std::string Chatter::GetRandomName() 
+std::string Chatter::GetRandomName()
 {
       static std::vector<std::string> messages = {
         "AutoClient_X99",
@@ -125,7 +125,7 @@ void Chatter::AddChatPartner(std::string name)
   MyChatPartners.push_back(name);
 }
 
-std::string Chatter::GetRandomChatPartner() 
+std::string Chatter::GetRandomChatPartner()
 {
     return GetRandomMessage(MyChatPartners);
 }
@@ -137,12 +137,12 @@ std::string Chatter::GetConnectionString()
 
 std::string Chatter::GetSubscribeString1()
 {
-  return "subscribe:World";   
+  return "subscribe:World";
 }
 std::string Chatter::GetSubscribeString2()
 {
-  return "subscribe:SomeChannel";   
-} 
+  return "subscribe:SomeChannel";
+}
 std::string Chatter::GetSubscribeString3()
 {
   std::string line;
@@ -153,49 +153,49 @@ std::string Chatter::GetSubscribeString3()
 std::string Chatter::GetRandomChatMsg()
 {
   FDaraChatMsg ChatMsg;
-  ChatMsg.ChatType= "Channel";
-  ChatMsg.ChatCmdType= "None";
+  ChatMsg.Type = EChatCmdType::Channel;
+
   ChatMsg.Sender= MyCharName;
   ChatMsg.Recipient= "World";
-  ChatMsg.Msg= GetRandomMessage();
-  
-  return ChatMsg.SerializeToSend();
+  ChatMsg.Message= GetRandomMessage();
+
+  return ChatMsg.Serialize();
 }
 
 std::string Chatter::GetRandomZoneMsg()
 {
   FDaraChatMsg ChatMsg;
-  ChatMsg.ChatType= "Zone";
-  ChatMsg.ChatCmdType= "None";
+  ChatMsg.Type = EChatCmdType::Zone;
+
   ChatMsg.Sender= MyCharName;
-  ChatMsg.Recipient= "Dungeon";
-  ChatMsg.Msg= GetRandomMessage();
-  
-  return ChatMsg.SerializeToSend();
+  ChatMsg.Recipient = "";
+  ChatMsg.Message= GetRandomMessage();
+
+  return ChatMsg.Serialize();
 }
 
 std::string Chatter::GetRandomTellMsg()
 {
   FDaraChatMsg ChatMsg;
-  ChatMsg.ChatType= "Tell";
-  ChatMsg.ChatCmdType= "None";
+  ChatMsg.Type = EChatCmdType::Tell;
+
   ChatMsg.Sender= MyCharName;
   ChatMsg.Recipient= GetRandomChatPartner();
-  ChatMsg.Msg= GetRandomMessage();
-  
-  return ChatMsg.SerializeToSend();
+  ChatMsg.Message= GetRandomMessage();
+
+  return ChatMsg.Serialize();
 }
 
 std::string Chatter::GetRandomGroupMsg()
 {
   FDaraChatMsg ChatMsg;
-  ChatMsg.ChatType= "Group";
-  ChatMsg.ChatCmdType= "None";
+  ChatMsg.Type = EChatCmdType::Group;
+
   ChatMsg.Sender= MyCharName;
-  ChatMsg.Recipient= "Group";
-  ChatMsg.Msg= GetRandomMessage();
-  
-  return ChatMsg.SerializeToSend();
+  ChatMsg.Recipient = "";
+  ChatMsg.Message= GetRandomMessage();
+
+  return ChatMsg.Serialize();
 }
 
 
@@ -208,18 +208,18 @@ std::string Chatter::GenerateRandomLogin()
   std::string line="connect:name="+MyCharName+ ";zone=Alpha;group=7;pass="+MyPass;
   return line;
 }
-   
+
 
 std::string Chatter::GetRandomInvite()
 {
     FDaraChatMsg ChatMsg;
-    ChatMsg.ChatType= "Cmd";
-    ChatMsg.ChatCmdType= "GroupInvite";
+
+    ChatMsg.Type = EChatCmdType::GroupInvite;
     ChatMsg.Sender= MyCharName;
     ChatMsg.Recipient= GetRandomChatPartner();
-    ChatMsg.Msg= "";
+    ChatMsg.Message= "";
 
-    return ChatMsg.SerializeToSend();
+    return ChatMsg.Serialize();
 }
 
 void Chatter::SendRandomZoneMessage()
@@ -238,12 +238,12 @@ void Chatter::SendZoneMessage(std::string msg)
   }
   if(count==5){
     FDaraChatMsg ChatMsg;
-    ChatMsg.ChatType= "Zone";
-    ChatMsg.ChatCmdType= "None";
+    ChatMsg.Type = EChatCmdType::Zone;
+
     ChatMsg.Sender= MyCharName;
-    ChatMsg.Recipient= MyZoneName;
-    ChatMsg.Msg= msg;
-  } 
+    ChatMsg.Recipient = "";
+    ChatMsg.Message= msg;
+  }
   return;
 }
 
@@ -257,12 +257,12 @@ void Chatter::SendTellMessage()
   }
   if(count==5){
     FDaraChatMsg ChatMsg;
-    ChatMsg.ChatType= "Tell";
-    ChatMsg.ChatCmdType= "None";
+    ChatMsg.Type = EChatCmdType::Tell;
+
     ChatMsg.Sender= MyCharName;
     ChatMsg.Recipient= "MeMercenary";
-    ChatMsg.Msg= GetRandomMessage();
-  } 
+    ChatMsg.Message= GetRandomMessage();
+  }
   return;
 }
 

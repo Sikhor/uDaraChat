@@ -21,7 +21,7 @@
 #include <cstring>          // For memset if needed
 #include <unordered_map>
 
-   
+
 #define DEBUGLEVEL 1
 
 uDaraChatLibrary *chatLibrary;
@@ -103,7 +103,7 @@ bool HandleConnect(PerSocketData *data, const std::string& message,
     return true;
 }
 
-bool DumpTopicSubscription(PerSocketData *data) 
+bool DumpTopicSubscription(PerSocketData *data)
 {
     std::cout << TimeStamp() << "Dumping topic subscriptions for: " << data->name << std::endl;
     for (size_t i = 0; i < data->topics.size(); ++i) {
@@ -117,7 +117,7 @@ bool DumpTopicSubscription(PerSocketData *data)
 
 
 
-bool RemoveGroupSubscription(uWS::WebSocket<true, true, PerSocketData>* ws) 
+bool RemoveGroupSubscription(uWS::WebSocket<true, true, PerSocketData>* ws)
 {
     PerSocketData *data = (PerSocketData *) ws->getUserData();
     std::string oldGroupTopic;
@@ -137,7 +137,7 @@ bool RemoveGroupSubscription(uWS::WebSocket<true, true, PerSocketData>* ws)
     return false;
 }
 
-bool RemoveTopicSubscription(uWS::WebSocket<true, true, PerSocketData>* ws,PerSocketData *data, const std::string& oldTopic) 
+bool RemoveTopicSubscription(uWS::WebSocket<true, true, PerSocketData>* ws,PerSocketData *data, const std::string& oldTopic)
 {
     for (size_t i = 0; i < data->topics.size(); ++i) {
         TopicSlot& slot = data->topics[i];
@@ -155,7 +155,7 @@ bool RemoveTopicSubscription(uWS::WebSocket<true, true, PerSocketData>* ws,PerSo
 }
 
 
-bool StoreTopicSubscription(PerSocketData *data, const std::string& newTopic) 
+bool StoreTopicSubscription(PerSocketData *data, const std::string& newTopic)
 {
     for (size_t i = 0; i < data->topics.size(); ++i) {
         TopicSlot& slot = data->topics[i];
@@ -264,16 +264,16 @@ void SendGroupUpdateInfo(uWS::SSLApp *app, uWS::OpCode opCode, std::string group
 {
     std::string topic=groupContainer->GetGroupTopic(groupId);
     FDaraChatMsg msg;
-    msg.ChatType= "Cmd";
-    msg.ChatCmdType= "GroupInfo";
+
+    msg.Type = EChatCmdType::GroupInfo;
     msg.Sender= "GroupAdmin";
-    msg.Recipient= "Group";
+    msg.Recipient = "";
 
     GroupInfo info=groupContainer->GetGroupInfoByGroupId(groupId);
-    msg.Msg= info.SerializeToSend();
+    msg.Message= info.SerializeToSend();
 
-    std::cout << TimeStamp() << "Sending GroupInfo: " << topic << ":" << msg.SerializeToPost() << std::endl;    
-    app->publish(topic, msg.SerializeToPost(), opCode);
+    std::cout << TimeStamp() << "Sending GroupInfo: " << topic << ":" << msg.Serialize() << std::endl;
+    app->publish(topic, msg.Serialize(), opCode);
 
 }
 
@@ -344,8 +344,8 @@ int main() {
     //return 0;
 
 
-    std::cout << TimeStamp() << "**********************Starting uDaraChatServer***********"<<std::endl;  
- 
+    std::cout << TimeStamp() << "**********************Starting uDaraChatServer***********"<<std::endl;
+
 
 
     ERR_clear_error();
@@ -368,7 +368,7 @@ int main() {
         return 1;
     }
     bool listening = false;
-    
+
     app->ws<PerSocketData>("/*", {
         /* Settings */
         .compression = uWS::DISABLED,
@@ -395,14 +395,14 @@ int main() {
             std::string_view remoteAddress = ws->getRemoteAddressAsText();
             std::string remoteAddressIPV4= ConvertMappedIPv6ToIPv4(std::string(remoteAddress));
             std::cout << TimeStamp() << "[WS OPEN] Awaiting JWT login; ip=" << remoteAddressIPV4 << std::endl;
-            
-            
+
+
         },
         .message = [&app, &jwtSecret](auto *ws, std::string_view message, uWS::OpCode opCode) {
             static int messageCount = 0;
             static bool scheduleFlip= false;
             messageCount++;
-            
+
             PerSocketData *perSocketData = (PerSocketData *) ws->getUserData();
             if(opCode!=1){
                 // we are just resending the info in the group channel so everybody can use it
@@ -420,15 +420,15 @@ int main() {
                 member.zone=perSocketData->zone;
                 FDaraRawChatMsg msg= validated;
                 float HealthPercentage= msg.Health/msg.MaxHealth;
-                member.health= std::to_string(HealthPercentage); 
+                member.health= std::to_string(HealthPercentage);
                 std::cout << TimeStamp() << "Alive: " << member.name << ":" << member.zone << ":" << member.health << std::endl;
                 groupContainer->AliveMsg(member);
                 return;
             }
             // Do not log raw text frames: login frames contain bearer credentials.
             std::string msg = std::string(message);
-            
-            
+
+
             if (msg.rfind("connect:", 0) == 0) {
                 if (perSocketData->connected) {
                     std::cout << TimeStamp() << "[AUTH REJECTED] Socket is already authenticated; open a new WebSocket to reauthenticate" << std::endl;
@@ -476,7 +476,7 @@ int main() {
                     std::vector<std::string> groupIds= groupContainer->GetUniqueGroupIds();
                     for (auto& groupId : groupIds) {
                         SendGroupUpdateInfo(app, opCode, groupId);
-        
+
                     }
                     groupContainer->DumpGroups();
                     scheduleFlip= true;
@@ -488,7 +488,7 @@ int main() {
                 }
             }
             if (msg.rfind("subscribe:", 0) == 0) {
-                HandleSubscribeMessage(ws, msg); 
+                HandleSubscribeMessage(ws, msg);
                 DumpTopicSubscription(perSocketData);
                 return;
             }
@@ -499,51 +499,69 @@ int main() {
                 return;
             }
 
-            FDaraChatMsg ChatMsg= chatLibrary->ParseSentMessage(msg);
+            // Optional: handle publishing
+            if (msg.rfind("publish:", 0) == 0) {
+                auto sep = msg.find(':', 8);
+                if (sep != std::string::npos) {
+                    std::string topic = msg.substr(8, sep - 8);
+                    // old version: std::string payload = msg.substr(sep + 1);
+                    std::string payload = msg.substr(8);
+                    //payload=topic+":"+perSocketData->name + ":" + msg;
+                    app->publish(topic, payload, opCode);
+                    if(DEBUGLEVEL>9){
+                        std::cout << "Message Publish   : " << topic << " : " << payload << std::endl;
+                    }
+                }
+                return;
+            }
+
+            FDaraChatMsg ChatMsg;
+            std::string parseError;
+            if (!chatLibrary->TryParseMessage(msg, ChatMsg, parseError)) return;
             // Never trust the sender field supplied by the client.
             ChatMsg.Sender = perSocketData->name;
-            std::cout << TimeStamp() << "***** Parsed ChatMsg: " << ChatMsg.ChatType<<"|"<< ChatMsg.ChatCmdType <<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Msg << std::endl;
+            std::cout << TimeStamp() << "***** Parsed ChatMsg: " << ChatCmdTypeToString(ChatMsg.Type) <<"|"<<ChatMsg.Sender<<"|"<<ChatMsg.Recipient<<"|"<<ChatMsg.Message << std::endl;
 
-            if (ChatMsg.ChatType=="Channel") {
-                app->publish(ChatMsg.Recipient, ChatMsg.SerializeToPost(), opCode);
-                std::cout << TimeStamp() << "Sending World: " << "World : " << ChatMsg.SerializeToPost() << std::endl;
+            if (ChatMsg.Type == EChatCmdType::Channel) {
+                app->publish(ChatMsg.Recipient, ChatMsg.Serialize(), opCode);
+                std::cout << TimeStamp() << "Sending World: " << "World : " << ChatMsg.Serialize() << std::endl;
                 return;
             }
-            if (ChatMsg.ChatType=="Zone") {
-                std::string topic=ChatMsg.getTopicPrefix()+perSocketData->zone; 
-                app->publish(topic,ChatMsg.SerializeToPost(), opCode);
-                std::cout << TimeStamp() << "Sending Zone: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+            if (ChatMsg.Type == EChatCmdType::Zone) {
+                std::string topic="zone_"+perSocketData->zone;
+                app->publish(topic,ChatMsg.Serialize(), opCode);
+                std::cout << TimeStamp() << "Sending Zone: " << topic << " : " << ChatMsg.Serialize() << std::endl;
                 return;
             }
-            if (ChatMsg.ChatType=="Group") {
+            if (ChatMsg.Type == EChatCmdType::Group) {
                 if(perSocketData->groupId.empty()){
                     std::cout << TimeStamp() << "Trying to send Group message with no group yet: " << ChatMsg.Sender << std::endl;
                     return;
                 }
                 std::string topic=perSocketData->groupId;
-                app->publish(topic, ChatMsg.SerializeToPost(), opCode);
-                std::cout << TimeStamp() << "Sending Group: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                app->publish(topic, ChatMsg.Serialize(), opCode);
+                std::cout << TimeStamp() << "Sending Group: " << topic << " : " << ChatMsg.Serialize() << std::endl;
                 return;
             }
-            if (ChatMsg.ChatType=="Tell") {
-                if(ChatMsg.Msg.rfind("DEBUG", 0) == 0){
+            if (ChatMsg.Type == EChatCmdType::Tell) {
+                if(ChatMsg.Message.rfind("DEBUG", 0) == 0){
                     std::cout << TimeStamp() << "DEBUG: Messages received: " << std::to_string(messageCount) << std::endl;
                     groupContainer->DumpGroups();
                     groupContainer->DumpInvites();
                     DumpTopicSubscription(perSocketData);
                     return;
                 }
-                std::string topic=ChatMsg.getTopicPrefix()+ToLower(ChatMsg.Recipient);
-                app->publish(topic, ChatMsg.SerializeToPost(), opCode);
-                std::cout << "Sending Tell: " << topic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::string topic="tell_"+ToLower(ChatMsg.Recipient);
+                app->publish(topic, ChatMsg.Serialize(), opCode);
+                std::cout << "Sending Tell: " << topic << " : " << ChatMsg.Serialize() << std::endl;
                 return;
             }
 
 
-            if(ChatMsg.ChatCmdType=="GroupInvite"){
+            if(ChatMsg.Type == EChatCmdType::GroupInvite){
                 std::string Inviter=ChatMsg.Sender;
                 std::string Invited=ChatMsg.Recipient;
-                std::cout << TimeStamp() << "GroupInvite: " << ChatMsg.Sender << " inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Msg << std::endl;
+                std::cout << TimeStamp() << "GroupInvite: " << ChatMsg.Sender << " inviting " << ChatMsg.Recipient << " to group " << ChatMsg.Message << std::endl;
                 // Check if the sender is already in a group otherwise start one
                 if(perSocketData->groupId.empty()){
                     std::cout << "GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
@@ -553,22 +571,21 @@ int main() {
                     perSocketData->groupId=info.groupId;
                     SubscribeGroupTopic(ws);
                     DumpTopicSubscription(perSocketData);
-                } 
-        
+                }
+
                 GroupInfo inviteCheck = groupContainer->GroupInvite(Invited, Inviter);
                 if (inviteCheck.errorCode != 1) return;
                 groupContainer->RemoveOldInvites();
                 groupContainer->AddInvite(Inviter, Invited);
                 // we must forward  this message to the tell_ topic channel
-                ChatMsg.ChatType="Tell";
-                std::string telltopic=ChatMsg.getTopicPrefix()+ToLower(Invited);
-                ChatMsg.ChatType="Cmd";
-                ChatMsg.ChatCmdType="GroupInvite";
-                app->publish(telltopic, ChatMsg.SerializeToPost(), opCode);
-                std::cout << TimeStamp() << "Sending Cmd: " << telltopic << " : " << ChatMsg.SerializeToPost() << std::endl;
+                std::string telltopic="tell_"+ToLower(Invited);
+
+                ChatMsg.Type = EChatCmdType::GroupInvite;
+                app->publish(telltopic, ChatMsg.Serialize(), opCode);
+                std::cout << TimeStamp() << "Sending Cmd: " << telltopic << " : " << ChatMsg.Serialize() << std::endl;
                 return;
             }
-            if(ChatMsg.ChatCmdType=="GroupJoin"){
+            if(ChatMsg.Type == EChatCmdType::GroupJoin){
                 std::string Inviter=ChatMsg.Recipient;
                 std::string Invited=ChatMsg.Sender;
                 std::cout << TimeStamp() << "GroupJoin: " << Invited << " wants to join group of " << Inviter <<std::endl;
@@ -588,14 +605,14 @@ int main() {
                     //can leave group as I am solo in there and want to join other group
                     RemoveGroupSubscription(ws);
                     groupContainer->GroupDisband(Invited);
-                    perSocketData->groupId=""; 
+                    perSocketData->groupId="";
                 }
                 std::cout << TimeStamp() << "GroupJoin: " << Invited << " has Membercount " << std::to_string(info.memberCount) <<std::endl;
 
                 if(perSocketData->groupId.empty() ){
                     std::cout << TimeStamp() << "GroupJoin: Joining group. Got GroupInvite with no group yet: " << ChatMsg.Sender << std::endl;
                     GroupInfo info=groupContainer->GroupJoin(Invited, Inviter);
-                    
+
                     if (info.errorCode != 0 || info.groupId.empty()) return;
                     // New Group
                     if (info.errorCode != 0) return;
@@ -607,12 +624,12 @@ int main() {
                     groupContainer->RemoveInvite(Inviter, Invited);
 
                     FDaraChatMsg msg;
-                    msg.ChatType= "Group";
+                    msg.Type = EChatCmdType::Group;
                     msg.Sender= perSocketData->name;
                     std::string newGroupTopic= perSocketData->groupId;
-                    msg.ChatType= "Cmd";
-                    msg.ChatCmdType= "GroupJoinInfo";
-                    //app->publish(newGroupTopic, chatLibrary->GetGroupJoinInfoMessage(msg), opCode);    
+
+                    msg.Type = EChatCmdType::GroupJoinInfo;
+                    //app->publish(newGroupTopic, chatLibrary->GetGroupJoinInfoMessage(msg), opCode);
                     SendGroupUpdateInfo(app, opCode, newGroupTopic);
 
                 }else{
@@ -621,7 +638,7 @@ int main() {
                 groupContainer->DumpGroups();// shall we let this message pass as it shall be published to the recipient?
                 return;
             }
-            if(ChatMsg.ChatCmdType=="GroupDisband"){
+            if(ChatMsg.Type == EChatCmdType::GroupDisband){
                 if(!perSocketData->groupId.empty()){
                     // disband from old group if not empty
                     std::cout << TimeStamp() << "GroupDisband: " << ChatMsg.Sender << " former groupId: " << perSocketData->groupId<< std::endl;
@@ -633,55 +650,39 @@ int main() {
                     DumpTopicSubscription(perSocketData);
 
                     FDaraChatMsg msg;
-                    msg.ChatType= "Cmd";
-                    msg.ChatCmdType= "GroupDisbandInfo";
+
+                    msg.Type = EChatCmdType::GroupDisbandInfo;
                     msg.Sender= perSocketData->name;
-                    app->publish(oldGroupTopic, chatLibrary->GetGroupDisbandInfoMessage(msg), opCode);    
+                    app->publish(oldGroupTopic, chatLibrary->GetGroupDisbandInfoMessage(msg), opCode);
                     SendGroupUpdateInfo(app, opCode, oldGroupTopic);
                 }else{
                     std::cout << TimeStamp() << "Received GroupDisband with no group ! " << ChatMsg.Sender << std::endl;
                 }
                 return;
             }
-            if(ChatMsg.ChatCmdType=="Alive"){
+            if(ChatMsg.Type == EChatCmdType::Alive){
                 GroupMember member;
                 member.name=ChatMsg.Sender;
                 member.zone=perSocketData->zone;
-                member.health=ChatMsg.Msg;
+                member.health=ChatMsg.Message;
                 std::cout << TimeStamp() << "Alive: " << member.name << ":" << member.zone << ":" << member.health << std::endl;
                 groupContainer->AliveMsg(member);
 
                 FDaraChatMsg msg;
-                msg.ChatType= "Cmd";
-                msg.ChatCmdType= "AliveInfo";
+
+                msg.Type = EChatCmdType::AliveInfo;
                 msg.Sender=ChatMsg.Sender;
-                msg.Recipient= "Group";
-                msg.Msg= member.zone + ";"+ ChatMsg.Msg;
+                msg.Recipient = "";
+                msg.Message= member.zone + ";"+ ChatMsg.Message;
                 std::string topic=perSocketData->groupId;
-                app->publish(topic, msg.SerializeToPost(), opCode);
-                std::cout << TimeStamp() << "Sending AliveInfo: " << topic << ":" << msg.SerializeToPost() << std::endl;
+                app->publish(topic, msg.Serialize(), opCode);
+                std::cout << TimeStamp() << "Sending AliveInfo: " << topic << ":" << msg.Serialize() << std::endl;
                 return;
             }
 
             std::cout << TimeStamp() << "ERROR: Why are we here? Should never come to here" << msg << std::endl;
-            // Optional: handle publishing
-            if (msg.rfind("publish:", 0) == 0) {
-                auto sep = msg.find(':', 8);
-                if (sep != std::string::npos) {
-                    std::string topic = msg.substr(8, sep - 8);
-                    // old version: std::string payload = msg.substr(sep + 1);
-                    std::string payload = msg.substr(8);
-                    //payload=topic+":"+perSocketData->name + ":" + msg;
-                    app->publish(topic, payload, opCode);
-                    if(DEBUGLEVEL>9){
-                        std::cout << "Message Publish   : " << topic << " : " << payload << std::endl;
-                    }
-                }
-                return;
-            }
-
             //ChatMessage chatMsg=chatLibrary->ParseChatMessage(msg);
-            //std::cout << TimeStamp() << "GroupInvite: " << chatMsg.sender << " Inviting " << chatMsg.receiver << " to group " << chatMsg.message << std::endl; 
+            //std::cout << TimeStamp() << "GroupInvite: " << chatMsg.sender << " Inviting " << chatMsg.receiver << " to group " << chatMsg.message << std::endl;
         },
         .drain = [](auto */*ws*/) {
             /* Check ws->getBufferedAmount() here */
@@ -709,7 +710,7 @@ int main() {
             //listen_socket = listen_s;
         }
     });
-    
+
     if (!listening) {
         std::cerr << "TLS startup failed: cannot listen on port 9020; check whether another process already owns the port." << std::endl;
         delete app;

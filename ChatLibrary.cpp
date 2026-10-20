@@ -35,43 +35,13 @@ std::string ToLower(const std::string& input) {
     return result;
 }
 
-inline std::string ChatTypeToString(EChatType type) {
+std::string ChatCmdTypeToString(EChatCmdType type) {
     switch (type) {
-        case EChatType::Channel: return "Channel";
-        case EChatType::Cmd: return "Cmd";
-        case EChatType::Group: return "Group";
-        case EChatType::Raid: return "Raid";
-        case EChatType::Tell: return "Tell";
-        case EChatType::Zone: return "Zone";
-        default: return "Unknown";
-    }
-}
-
-
-
-
-
-inline EChatType ChatTypeFromString(const std::string& str) {
-    static const std::unordered_map<std::string, EChatType> stringToChatType = {
-        {"Channel", EChatType::Channel},
-        {"Cmd", EChatType::Cmd},
-        {"Group", EChatType::Group},
-        {"Raid", EChatType::Raid},
-        {"Group", EChatType::Group},
-        {"Tell", EChatType::Tell},
-        {"Zone", EChatType::Zone}
-    };
-
-    auto it = stringToChatType.find(str);
-    if (it != stringToChatType.end()) {
-        return it->second;
-    }
-    return EChatType::Unknown;
-}
-
-
-inline std::string ChatCmdTypeToString(EChatCmdType type) {
-    switch (type) {
+        case EChatCmdType::Tell: return "Tell";
+        case EChatCmdType::Group: return "Group";
+        case EChatCmdType::Raid: return "Raid";
+        case EChatCmdType::Zone: return "Zone";
+        case EChatCmdType::Channel: return "Channel";
         case EChatCmdType::GroupInvite: return "GroupInvite";
         case EChatCmdType::GroupJoin: return "GroupJoin";
         case EChatCmdType::GroupJoinInfo: return "GroupJoinInfo";
@@ -81,96 +51,35 @@ inline std::string ChatCmdTypeToString(EChatCmdType type) {
         case EChatCmdType::GroupKickInfo: return "GroupKickInfo";
         case EChatCmdType::GroupInfo: return "GroupInfo";
         case EChatCmdType::Alive: return "Alive";
-        default: return "None";
-    }   
+        case EChatCmdType::AliveInfo: return "AliveInfo";
+        case EChatCmdType::None: return "None";
+    }
+    return "None";
 }
 
-
-inline EChatCmdType ChatCmdTypeFromString(const std::string& str) {
-    static const std::unordered_map<std::string, EChatCmdType> stringToChatCmdType = {
-        {"GroupInvite", EChatCmdType::GroupInvite},
-        {"GroupJoin", EChatCmdType::GroupJoin},
-        {"GroupJoinInfo", EChatCmdType::GroupJoinInfo},
-        {"GroupDisband", EChatCmdType::GroupDisband},
-        {"GroupDisbandInfo", EChatCmdType::GroupDisbandInfo},
-        {"GroupKick", EChatCmdType::GroupKick},
-        {"GroupKickInfo", EChatCmdType::GroupKickInfo},
-        {"GroupInfo", EChatCmdType::GroupInfo},
-        {"Alive", EChatCmdType::Alive},
-        {"None", EChatCmdType::None}
-    };
-
-    auto it = stringToChatCmdType.find(str);
-    if (it != stringToChatCmdType.end()) {
-        return it->second;
-    }
+EChatCmdType ChatCmdTypeFromString(const std::string& str) {
+    if (str == "Tell") return EChatCmdType::Tell;
+    if (str == "Group") return EChatCmdType::Group;
+    if (str == "Raid") return EChatCmdType::Raid;
+    if (str == "Zone") return EChatCmdType::Zone;
+    if (str == "Channel") return EChatCmdType::Channel;
+    if (str == "GroupInvite") return EChatCmdType::GroupInvite;
+    if (str == "GroupJoin") return EChatCmdType::GroupJoin;
+    if (str == "GroupJoinInfo") return EChatCmdType::GroupJoinInfo;
+    if (str == "GroupDisband") return EChatCmdType::GroupDisband;
+    if (str == "GroupDisbandInfo") return EChatCmdType::GroupDisbandInfo;
+    if (str == "GroupKick") return EChatCmdType::GroupKick;
+    if (str == "GroupKickInfo") return EChatCmdType::GroupKickInfo;
+    if (str == "GroupInfo") return EChatCmdType::GroupInfo;
+    if (str == "Alive") return EChatCmdType::Alive;
+    if (str == "AliveInfo") return EChatCmdType::AliveInfo;
+    if (str == "None") return EChatCmdType::None;
     return EChatCmdType::None;
 }
 
-
-FDaraChatMsg::FDaraChatMsg()
-{
-    ChatType = "Channel";
-    ChatCmdType = "None";
-    Sender = "";
-    Recipient = "";
-    Msg = "";
+std::string FDaraChatMsg::Serialize() const {
+    return ChatCmdTypeToString(Type) + ":" + Sender + ":" + Recipient + ":" + Message;
 }
-
-std::string FDaraChatMsg::SerializeToSend()
-{
-    std::string serialized = ChatType + ":" +
-                              ChatCmdType + ":" +
-                              Sender + ":" +
-                              Recipient + ":" +
-                              Msg;
-    return serialized;
-}
-
-std::string FDaraChatMsg::SerializeToPost()
-{
-    std::string serialized = ChatType + ":" +
-                              ChatCmdType + ":" + 
-                              Sender + ":" +
-                              Msg;
-    return serialized;
-}
-
-
-
-std::string FDaraChatMsg::getTopicPrefix()
-{
-    if(ChatType=="Channel"){
-        std::string topic = "channel_";
-        return topic;
-    }
-    if(ChatType=="Cmd"){
-        std::string topic = "tell_";
-        return topic;
-    }
-    if(ChatType=="Group"){
-        std::string topic = "group_";
-        return topic;
-    }
-    if(ChatType=="Raid"){
-        std::string topic = "raid_";
-        return topic;
-    }
-    if(ChatType=="Tell"){
-        std::string topic = "tell_";
-        return topic;
-    }
-    if(ChatType=="Zone"){
-        std::string topic = "zone_";
-        return topic;
-    }
-    if(ChatType=="Unknown"){
-        std::string topic = "";
-        return topic;
-    }
-    return ChatType;
-}
-
 
 bool FDaraRawChatMsg::Deserialize(const std::vector<uint8_t>& data)
 {
@@ -379,96 +288,43 @@ void uDaraChatLibrary::ErrorMsg(int code, std::string msg)
     std::cout << "Error: " << code << " "<<msg << std::endl;
 }
 
-FDaraChatMsg uDaraChatLibrary::ParseReceivedMessage(const std::string& input)
-{
-    std::stringstream ss(input);
-    std::string segment;
-    std::vector<std::string> parts;
-
-    while (std::getline(ss, segment, ':')) {
-        parts.push_back(segment);
+bool uDaraChatLibrary::TryParseMessage(const std::string& input,
+                                      FDaraChatMsg& output, std::string& error) {
+    output = FDaraChatMsg{};
+    error.clear();
+    const auto first = input.find(':');
+    const auto second = first == std::string::npos ? first : input.find(':', first + 1);
+    const auto third = second == std::string::npos ? second : input.find(':', second + 1);
+    if (third == std::string::npos) {
+        error = "Expected Type:Sender:Recipient:Message";
+        return false;
     }
-
-    if (parts.size() < 3 ) {
-        FDaraChatMsg emptyMsg;
-        return emptyMsg; // Invalid message format      
+    FDaraChatMsg parsed;
+    parsed.Type = ChatCmdTypeFromString(input.substr(0, first));
+    if (parsed.Type == EChatCmdType::None) {
+        error = "Unknown or inactive message type";
+        return false;
     }
-
-    FDaraChatMsg msg;
-    msg.ChatType = parts[0];
-    msg.ChatCmdType = parts[1];
-    msg.Sender = parts[2];
-    msg.Recipient= "";// its always me as I received it
-
-    if(parts.size() < 4)    {
-        msg.Msg = ""; // No message content
-        return msg;
-    } 
-    // Join the remaining parts for the full message (in case message contains colons)
-    msg.Msg = parts[3];
-    for (size_t i = 4; i < parts.size(); ++i) {
-        msg.Msg += ":" + parts[i];
-    }
-
-    return msg;
+    parsed.Sender = input.substr(first + 1, second - first - 1);
+    parsed.Recipient = input.substr(second + 1, third - second - 1);
+    parsed.Message = input.substr(third + 1);
+    output = parsed;
+    return true;
 }
 
-
-FDaraChatMsg uDaraChatLibrary::ParseSentMessage(const std::string& input)
-{
-    std::stringstream ss(input);
-    std::string segment;
-    std::vector<std::string> parts;
-
-    while (std::getline(ss, segment, ':')) {
-        parts.push_back(segment);
-    }
-
-    if (parts.size() < 4 ) {
-        FDaraChatMsg emptyMsg;
-        return emptyMsg; // Invalid message format      
-    }
-
-    FDaraChatMsg msg;
-    msg.ChatType = parts[0];
-    msg.ChatCmdType = parts[1];
-    msg.Sender = parts[2];
-    msg.Recipient = parts[3];
-
-    if(parts.size() < 5)    {
-        msg.Msg = ""; // No message content
-        return msg;
-    } 
-    // Join the remaining parts for the full message (in case message contains colons)
-    msg.Msg = parts[4];
-    for (size_t i = 5; i < parts.size(); ++i) {
-        msg.Msg += ":" + parts[i];
-    }
-
-    return msg;
+std::string uDaraChatLibrary::GetGroupJoinInfoMessage(FDaraChatMsg msg) {
+    msg.Type = EChatCmdType::GroupJoinInfo;
+    msg.Message = "joined the group";
+    return msg.Serialize();
 }
 
-
-
-
-std::string uDaraChatLibrary::GetGroupJoinInfoMessage(FDaraChatMsg msg)
-{
-    msg.ChatType= "Group";
-    msg.ChatCmdType= "GroupJoinInfo";
-    std::string message = msg.ChatType + ":" + msg.Sender + ":joined the group";
-    return message;
+std::string uDaraChatLibrary::GetGroupDisbandInfoMessage(FDaraChatMsg msg) {
+    msg.Type = EChatCmdType::GroupDisbandInfo;
+    msg.Message = "left the group";
+    return msg.Serialize();
 }
-std::string uDaraChatLibrary::GetGroupDisbandInfoMessage(FDaraChatMsg msg)
-{
-    msg.ChatType= "Group";
-    msg.ChatCmdType= "GroupDisbandInfo";
-    std::string message = msg.ChatType + ":" + msg.Sender + ":left the group";
-    return message;
-}
-std::string uDaraChatLibrary::GetGroupKickInfoMessage(FDaraChatMsg msg)
-{   
-    msg.ChatType= "Group";
-    msg.ChatCmdType= "GroupKickInfo";
-    std::string message = msg.ChatType + ":" + msg.Sender + ":" + msg.Msg;
-    return message;
+
+std::string uDaraChatLibrary::GetGroupKickInfoMessage(FDaraChatMsg msg) {
+    msg.Type = EChatCmdType::GroupKickInfo;
+    return msg.Serialize();
 }

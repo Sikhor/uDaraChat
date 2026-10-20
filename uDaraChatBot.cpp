@@ -50,7 +50,7 @@ public:
     	   std::lock_guard<std::mutex> lck(mtx);
      	   wsclient.poll(this);
     	   //std::cout << "Client polling..." << std::endl;
-	   
+
    }
 	std::this_thread::sleep_for(std::chrono::milliseconds(10));
     	//std::cout << "Client wake up..." << std::endl;
@@ -67,7 +67,7 @@ public:
     }else{
       chatter.AddChatPartner(Recipient);
     }
-    
+
     // Login and subscriptions share the polling mutex.
     {
     std::lock_guard<std::mutex> lock(mtx);
@@ -80,9 +80,9 @@ public:
     msg= chatter.GetSubscribeString3();
     wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
     }
-    
-    
-    
+
+
+
 
     if (mode == "controlled") std::cout << "CONTROL READY" << std::endl;
     while (running.load(std::memory_order_relaxed) && wsclient.isConnected()) {
@@ -131,7 +131,9 @@ public:
 
     //std::cout.write((const char*)payload, pl_len);
     std::cout <<"Received:"<<recMsg<< std::endl;
-    FDaraChatMsg ChatMsg= chatLibrary.ParseReceivedMessage(recMsg);
+    FDaraChatMsg ChatMsg;
+    std::string parseError;
+    if (!chatLibrary.TryParseMessage(recMsg, ChatMsg, parseError)) return;
     ChatReply(ChatMsg);
   }
 
@@ -156,106 +158,106 @@ public:
       input >> action >> target;
       if (action == "quit") { stop(); return; }
       FDaraChatMsg message;
-      message.ChatType = "Cmd";
+
       message.Sender = chatter.MyCharName;
       message.Recipient = target;
       if (action == "world") {
           const auto text = command.find_first_not_of(" ", command.find(' ') == std::string::npos ? command.size() : command.find(' '));
           if (text == std::string::npos) { std::cerr << "world requires a message" << std::endl; return; }
-          message.ChatType = "Channel";
-          message.ChatCmdType = "None";
+          message.Type = EChatCmdType::Channel;
+
           message.Recipient = "World";
-          message.Msg = command.substr(text);
+          message.Message = command.substr(text);
       }
-      else if (action == "invite" && !target.empty()) message.ChatCmdType = "GroupInvite";
-      else if (action == "kick" && !target.empty()) message.ChatCmdType = "GroupKick";
-      else if (action == "leave") message.ChatCmdType = "GroupDisband";
+      else if (action == "invite" && !target.empty()) message.Type = EChatCmdType::GroupInvite;
+      else if (action == "kick" && !target.empty()) message.Type = EChatCmdType::GroupKick;
+      else if (action == "leave") { message.Type = EChatCmdType::GroupDisband; message.Recipient.clear(); }
       else { std::cerr << "Control command: world <message>, invite <name>, kick <name>, leave, quit" << std::endl; return; }
-      const std::string frame = message.SerializeToSend();
+      const std::string frame = message.Serialize();
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)frame.data(), frame.size());
       std::cout << "CONTROL SENT " << action << " " << target << std::endl;
   }
 
   void ChatReply(FDaraChatMsg ChatMsg)
   {
-      if(ChatMsg.ChatCmdType=="GroupInvite"){
-        std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " me to group " << ChatMsg.Msg << std::endl; 
-        
+      if(ChatMsg.Type == EChatCmdType::GroupInvite){
+        std::cout << "GroupInvite: " << ChatMsg.Sender << " Inviting " << ChatMsg.Recipient << " me to group " << ChatMsg.Message << std::endl;
+
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Cmd";
-        replyMsg.ChatCmdType= "GroupJoin";
+
+        replyMsg.Type = EChatCmdType::GroupJoin;
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= ChatMsg.Msg;
-        std::string msgStr= replyMsg.SerializeToSend();
+        replyMsg.Message= ChatMsg.Message;
+        std::string msgStr= replyMsg.Serialize();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("InviteMe", 0) == 0){
-        std::cout << "Tell: " << ChatMsg.Sender << " requesting a group Invite " << ChatMsg.Recipient << std::endl; 
-        
+      if(ChatMsg.Type == EChatCmdType::Tell && ChatMsg.Message.rfind("InviteMe", 0) == 0){
+        std::cout << "Tell: " << ChatMsg.Sender << " requesting a group Invite " << ChatMsg.Recipient << std::endl;
+
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Cmd";
-        replyMsg.ChatCmdType= "GroupInvite";
+
+        replyMsg.Type = EChatCmdType::GroupInvite;
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "";
-        std::string msgStr= replyMsg.SerializeToSend();
+        replyMsg.Message= "";
+        std::string msgStr= replyMsg.Serialize();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("Ping", 0) == 0){
-        std::cout << "Tell with Ping: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
-        
+      if(ChatMsg.Type == EChatCmdType::Tell && ChatMsg.Message.rfind("Ping", 0) == 0){
+        std::cout << "Tell with Ping: " << ChatMsg.Sender << ":"  << ChatMsg.Message << std::endl;
+
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Tell";
+        replyMsg.Type = EChatCmdType::Tell;
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "Pong";
-        std::string msgStr= replyMsg.SerializeToSend();
+        replyMsg.Message= "Pong";
+        std::string msgStr= replyMsg.Serialize();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("Hello", 0) == 0){
-        std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
-        
+      if(ChatMsg.Type == EChatCmdType::Tell && ChatMsg.Message.rfind("Hello", 0) == 0){
+        std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Message << std::endl;
+
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Tell";
+        replyMsg.Type = EChatCmdType::Tell;
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "Hi my friend! Good to hear from you!";
-        std::string msgStr= replyMsg.SerializeToSend();
+        replyMsg.Message= "Hi my friend! Good to hear from you!";
+        std::string msgStr= replyMsg.Serialize();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Tell" && ChatMsg.Msg.rfind("Pong", 0) != 0){
-        std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Msg << std::endl; 
-        
+      if(ChatMsg.Type == EChatCmdType::Tell && ChatMsg.Message.rfind("Pong", 0) != 0){
+        std::cout << "Tell with Hello: " << ChatMsg.Sender << ":"  << ChatMsg.Message << std::endl;
+
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Tell";
+        replyMsg.Type = EChatCmdType::Tell;
         replyMsg.Sender= chatter.MyCharName;
         replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= "Hello my friend! Good to hear from you!";
-        std::string msgStr= replyMsg.SerializeToSend();
+        replyMsg.Message= "Hello my friend! Good to hear from you!";
+        std::string msgStr= replyMsg.Serialize();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         return;
       }
-      if(ChatMsg.ChatType=="Cmd" && ChatMsg.ChatCmdType=="GroupInfo"){
-        std::cout << "Group: " << ChatMsg.Sender << " requesting a alive msg from me " << ChatMsg.Recipient << std::endl; 
-        
+      if(ChatMsg.Type == EChatCmdType::GroupInfo){
+        std::cout << "Group: " << ChatMsg.Sender << " requesting a alive msg from me " << ChatMsg.Recipient << std::endl;
+
         /* old method with string
         FDaraChatMsg replyMsg;
-        replyMsg.ChatType= "Cmd";
-        replyMsg.ChatCmdType= "Alive";
+
+        replyMsg.Type = EChatCmdType::Alive;
         replyMsg.Sender= chatter.MyCharName;
-        replyMsg.Recipient= ChatMsg.Sender;
-        replyMsg.Msg= chatter.MyHealth;
-        std::string msgStr= replyMsg.SerializeToSend();
+        replyMsg.Recipient = "";
+        replyMsg.Message= chatter.MyHealth;
+        std::string msgStr= replyMsg.Serialize();
         std::cout << msgStr <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msgStr.data(), msgStr.size());
         */
@@ -278,9 +280,9 @@ public:
         std::cout << "MaxMana: " << msg.MaxMana << "\n";
         std::cout << "Energy: " << msg.Energy << "\n";
         std::cout << "MaxEnergy: " << msg.MaxEnergy << "\n";
-        
+
         std::vector<uint8_t> payload = msg.Serialize();
-        wsclient.send(websocket::OPCODE_BINARY, (const uint8_t*)payload.data(), payload.size()); 
+        wsclient.send(websocket::OPCODE_BINARY, (const uint8_t*)payload.data(), payload.size());
 
         return;
       }
@@ -293,7 +295,7 @@ public:
     count++;
     upTimeCounter++;
     if(mode=="chatting"){
-      std::string msg; 
+      std::string msg;
       if(count==1){
         msg= chatter.GetRandomChatMsg();
       }
@@ -309,7 +311,7 @@ public:
       }
       std::cout << msg <<std::endl;
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
-      
+
     }
     if(mode=="inviting"){
       std::string msg= chatter.GetRandomInvite();
@@ -338,9 +340,9 @@ public:
         std::cout << "MaxEnergy: " << msg.MaxEnergy << "\n";
         std::cout << "Zone: " << msg.Zone << "\n";
         std::cout << "CharName: " << msg.CharName << "\n";
-        
+
         std::vector<uint8_t> payload = msg.Serialize();
-        wsclient.send(websocket::OPCODE_BINARY, (const uint8_t*)payload.data(), payload.size()); 
+        wsclient.send(websocket::OPCODE_BINARY, (const uint8_t*)payload.data(), payload.size());
 
     }
     if(mode=="silent"){
@@ -348,19 +350,19 @@ public:
     if(mode=="grouptests"){
       if(count==2){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "GroupDisband";
+        ChatMsg.Type = EChatCmdType::GroupDisband;
         ChatMsg.Sender= chatter.MyCharName;
-        ChatMsg.Recipient= chatter.GetRandomChatPartner();
-        std::string msg= ChatMsg.SerializeToSend();
+        ChatMsg.Recipient = "";
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
       }
       if(count==5){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "GroupJoin";
+        ChatMsg.Type = EChatCmdType::GroupJoin;
         ChatMsg.Sender= chatter.MyCharName;
         ChatMsg.Recipient= chatter.GetRandomChatPartner();
-        std::string msg= ChatMsg.SerializeToSend();
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
         count=0;
@@ -375,38 +377,38 @@ public:
     if(mode=="groupmember"){
       if(count==1){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "GroupDisband";
+        ChatMsg.Type = EChatCmdType::GroupDisband;
         ChatMsg.Sender= chatter.MyCharName;
-        ChatMsg.Recipient= chatter.GetRandomChatPartner();
-        std::string msg= ChatMsg.SerializeToSend();
+        ChatMsg.Recipient = "";
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
       }
       if(count==4){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "GroupJoin";
+        ChatMsg.Type = EChatCmdType::GroupJoin;
         ChatMsg.Sender= chatter.MyCharName;
         ChatMsg.Recipient= chatter.GetRandomChatPartner();
-        std::string msg= ChatMsg.SerializeToSend();
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
       }
       if(count==5){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "Group";
+        ChatMsg.Type = EChatCmdType::Group;
         ChatMsg.Sender= chatter.MyCharName;
-        ChatMsg.Recipient= "Group";
-        ChatMsg.Msg= "I am in your group now " + std::to_string(upTimeCounter);
-        std::string msg= ChatMsg.SerializeToSend();
+        ChatMsg.Recipient = "";
+        ChatMsg.Message= "I am in your group now " + std::to_string(upTimeCounter);
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
       }
       if(count==10){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "GroupDisband";
+        ChatMsg.Type = EChatCmdType::GroupDisband;
         ChatMsg.Sender= chatter.MyCharName;
-        ChatMsg.Recipient= "Group";
-        std::string msg= ChatMsg.SerializeToSend();
+        ChatMsg.Recipient = "";
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
         count=0;
@@ -415,34 +417,34 @@ public:
     if(mode=="groupleader"){
       if(count==2){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "GroupInvite";
+        ChatMsg.Type = EChatCmdType::GroupInvite;
         ChatMsg.Sender= chatter.MyCharName;
         ChatMsg.Recipient= chatter.GetRandomChatPartner();
-        std::string msg= ChatMsg.SerializeToSend();
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
       }
       if(count==5){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "Group";
+        ChatMsg.Type = EChatCmdType::Group;
         ChatMsg.Sender= chatter.MyCharName;
-        ChatMsg.Recipient= "Group";
-        ChatMsg.Msg= "Welcome to my group "+std::to_string(upTimeCounter);
-        std::string msg= ChatMsg.SerializeToSend();
+        ChatMsg.Recipient = "";
+        ChatMsg.Message= "Welcome to my group "+std::to_string(upTimeCounter);
+        std::string msg= ChatMsg.Serialize();
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         std::cout << msg <<std::endl;
         count=0;
       }
     }
     if(mode=="pingpong"){
-      std::string msg; 
+      std::string msg;
       if(count==4){
         FDaraChatMsg ChatMsg;
-        ChatMsg.ChatType= "Tell";
+        ChatMsg.Type = EChatCmdType::Tell;
         ChatMsg.Sender= chatter.MyCharName;
         ChatMsg.Recipient= chatter.GetRandomChatPartner();
-        ChatMsg.Msg= "Ping "+ std::to_string(upTimeCounter);
-        msg= ChatMsg.SerializeToSend();
+        ChatMsg.Message= "Ping "+ std::to_string(upTimeCounter);
+        msg= ChatMsg.Serialize();
         std::cout << "PingPong: "<< msg <<std::endl;
         wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)msg.data(), msg.size());
         count=0;
@@ -494,7 +496,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  
+
   // Example: check for a --name argument
   std::string mode;
   std::string name;
@@ -565,10 +567,10 @@ int main(int argc, char** argv) {
       std::cout << "Starting with random name."<< std::endl;
       name= "";
   }
-    
+
 
   std::cout << "Starting with Sleep  " << SleepSeconds << " Seconds." << std::endl;
-  
+
 
   client.run(mode, name, recipient, SleepSeconds, token);
   return 0;

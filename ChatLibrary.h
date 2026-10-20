@@ -12,17 +12,12 @@
 std::string ToLower(const std::string& input);
 
 
-enum class EChatType {
-	Channel,
-    Cmd,
-	Group,
-	Raid,
+enum class EChatCmdType {
     Tell,
-	Zone,
-    Unknown
-};
-
-enum class EChatCmdType{
+    Group,
+    Raid,
+    Zone,
+    Channel,
     GroupInvite,
     GroupJoin,
     GroupJoinInfo,
@@ -30,33 +25,23 @@ enum class EChatCmdType{
     GroupDisbandInfo,
     GroupKick,
     GroupKickInfo,
-    GroupInfo, 
+    GroupInfo,
     Alive,
     AliveInfo,
     None
 };
 
-inline std::string ChatCmdTypeToString(EChatCmdType type);
-inline EChatCmdType ChatCmdTypeFromString(const std::string& str);  
+std::string ChatCmdTypeToString(EChatCmdType type);
+EChatCmdType ChatCmdTypeFromString(const std::string& str);
 
-inline std::string ChatTypeToString(EChatType type) ;
-inline EChatType ChatTypeFromString(const std::string& str);
-
-
-class FDaraChatMsg {
-public:
-    std::string ChatType;
-    std::string ChatCmdType;
+struct FDaraChatMsg {
+    EChatCmdType Type = EChatCmdType::None;
     std::string Sender;
     std::string Recipient;
-    std::string Msg;
+    std::string Message;
 
-    FDaraChatMsg();
-    std::string SerializeToSend();
-    std::string SerializeToPost();
-    std::string getTopicPrefix();
+    std::string Serialize() const;
 };
-
 
 struct FVector {
     float X;
@@ -88,8 +73,7 @@ class uDaraChatLibrary
 
         int MyDebugLevel=0;
 
-        FDaraChatMsg ParseSentMessage(const std::string& input);
-        FDaraChatMsg ParseReceivedMessage(const std::string& input);
+        bool TryParseMessage(const std::string& input, FDaraChatMsg& output, std::string& error);
         std::string GetGroupJoinInfoMessage(FDaraChatMsg msg);
         std::string GetGroupDisbandInfoMessage(FDaraChatMsg msg);
         std::string GetGroupKickInfoMessage(FDaraChatMsg msg);

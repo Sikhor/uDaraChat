@@ -1,6 +1,6 @@
 # uDaraChatServer – Interface Documentation
 
-As of October 18, 2026, based on the current local source code.
+As of October 20, 2026, based on the current local source code.
 This document describes the behavior actually implemented by the server.
 
 ## 1. Connection and authentication
@@ -82,49 +82,44 @@ memory and are lost when the server restarts.
 Each chat message or group command is sent as a separate WebSocket text frame:
 
 ```text
-ChatType:ChatCmdType:Sender:Recipient:Msg
+Type:Sender:Recipient:Message
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `ChatType` | `Channel`, `Zone`, `Group`, `Tell`, or `Cmd` |
-| `ChatCmdType` | `None` for chat; a command such as `GroupInvite` for commands |
+| `Type` | One `EChatCmdType` value: chat type, group command, or notification |
 | `Sender` | Overwritten by the server with the authenticated character name |
-| `Recipient` | Channel name, target character, or placeholder, depending on the type |
-| `Msg` | Message text or command-specific content; may be empty |
+| `Recipient` | Target character or channel; empty for group and zone operations |
+| `Message` | Message text or command-specific content; may be empty |
 
-Types and commands are case-sensitive. Colons within `Msg` are reassembled;
-the first four fields must not contain colons. A trailing colon in the message
-text may be lost by the current parser. There is no escaping mechanism.
-Avoid `:`, `;`, and `,` in names and zones, since the protocol uses them as separators.
+Types are case-sensitive. Both directions use the same four fields. Split at
+only the first three colons; the remaining text is preserved exactly, including
+trailing colons. Empty messages require the final delimiter. Unknown types,
+`None`, and malformed envelopes are rejected. Sender and recipient cannot contain
+colons. Avoid `:`, `;`, and `,` in names and zones because payloads also use separators.
 
-### Server → Client
+Group and zone destinations are determined from the authenticated connection;
+clients need not send group IDs or zone names. Their recipient fields are ignored.
+The server retains the recipient when forwarding messages, so custom channels
+can be identified. Server-generated group notifications use an empty recipient.
 
-The regular incoming format has **only four fields**:
-
-```text
-ChatType:ChatCmdType:Sender:Msg
-```
-
-Neither `Recipient` nor the topic is included. Split incoming messages at only
-the first **three** colons. A client subscribed to several custom channels cannot
-identify the source channel from a regular `Channel` message alone.
-The group departure notification is an exception to this format; see section 4.
+This format replaces the previous protocol and requires updated clients.
+Authentication, subscriptions, and binary frames keep their existing formats.
 
 ## 3. Chat messages and channels
 
 | Purpose | Example Client → Server | Actual destination |
 | --- | --- | --- |
-| World chat | `Channel:None:Alice:World:Hello everyone!` | Topic `World` |
-| Custom channel | `Channel:None:Alice:Trade:Selling a sword` | Topic `Trade` |
-| Zone chat | `Zone:None:Alice:Dungeon:Who is here?` | `zone_` + zone supplied during authentication |
-| Group chat | `Group:None:Alice:Group:Ready?` | Sender's current group |
-| Private message | `Tell:None:Alice:Bob:Hello Bob!` | Topic `tell_bob` |
+| World chat | `Channel:Alice:World:Hello everyone!` | Topic `World` |
+| Custom channel | `Channel:Alice:Trade:Selling a sword` | Topic `Trade` |
+| Zone chat | `Zone:Alice::Who is here?` | `zone_` + zone supplied during authentication |
+| Group chat | `Group:Alice::Ready?` | Sender's current group |
+| Private message | `Tell:Alice:Bob:Hello Bob!` | Topic `tell_bob` |
 
 Example of a private message received by Bob:
 
 ```text
-Tell:None:Alice:Hello Bob!
+Tell:Alice:Bob:Hello Bob!
 ```
 
 For `Channel`, the recipient is used **unchanged as the topic**; no `channel_`
@@ -170,7 +165,7 @@ The group ID has the form `group_<uuid>` and also serves as its topic.
 Alice sends:
 
 ```text
-Cmd:GroupInvite:Alice:Bob:
+GroupInvite:Alice:Bob:
 ```
 
 If Alice is not already in a group, the server creates one with Alice as its
@@ -179,7 +174,7 @@ invite members. The invited character must not belong to any group at the time
 of the invitation. Bob receives this message through his private channel:
 
 ```text
-Cmd:GroupInvite:Alice:
+GroupInvite:Alice:Bob:
 ```
 
 The invitation is stored on the server and expires when it is more than
@@ -192,7 +187,7 @@ An invitation does not reserve a slot; capacity is checked when the character jo
 Bob uses the **inviter's name** as the recipient, rather than a group ID:
 
 ```text
-Cmd:GroupJoin:Bob:Alice:
+GroupJoin:Bob:Alice:
 ```
 
 The server checks the stored invitation, the existence of the target group, and
@@ -206,7 +201,7 @@ one-person group is also rejected.
 ### Leaving a group
 
 ```text
-Cmd:GroupDisband:Bob:Group:
+GroupDisband:Bob::
 ```
 
 **`GroupDisband` removes only the sender from the group.** It does not dissolve
@@ -214,10 +209,10 @@ an entire group with multiple members. If the leader leaves, the first remaining
 member in the internal ordering becomes leader, regardless of online status.
 After the last member leaves, no membership remains for that group.
 
-The remaining subscribers first receive this special three-field message:
+The remaining subscribers first receive this regular notification:
 
 ```text
-Group:Bob:left the group
+GroupDisbandInfo:Bob::left the group
 ```
 
 A regular `GroupInfo` message follows. Although the code defines a
@@ -228,10 +223,10 @@ not receive its own departure acknowledgement; its UI must account for this.
 ### Receiving group information
 
 ```text
-Cmd:GroupInfo:GroupAdmin:group_<uuid>;Alice;1;2;0;Alice,1;Bob,1
+GroupInfo:GroupAdmin::group_<uuid>;Alice;1;2;0;Alice,1;Bob,1
 ```
 
-The content after `Cmd:GroupInfo:GroupAdmin:` has this structure:
+The content after `GroupInfo:GroupAdmin::` has this structure:
 
 ```text
 groupId;leaderName;isLeader;memberCount;errorCode;name,online;name,online;...
@@ -248,28 +243,28 @@ groupId;leaderName;isLeader;memberCount;errorCode;name,online;name,online;...
 
 Determine whether the local character is leader using `leaderName == ownName`.
 `GroupInfo` does not contain health values, zones, or positions.
-The deserializer also supports legacy member entries without `,online`;
+The group-info payload deserializer also supports legacy member entries without `,online`;
 these are read as offline by default.
 
 `GroupInfo` is published after joining, leaving, reconnecting to an existing
 group, and when a member disconnects. It is not sent when an invitation first
-creates a group. Sending `Cmd:GroupInfo:...` from a client is not an implemented
+creates a group. Sending `GroupInfo:...` from a client is not an implemented
 query command.
 
 ### Complete example with two clients
 
 ```text
 Alice → Server: connect:name=Alice;zone=Dungeon;group=;pass=<JWT>
-Bob   → Server: connect:name=Bob;zone=Dungeon;pass=<sha1-of-Bob>
-Alice → Server: Cmd:GroupInvite:Alice:Bob:
-Server → Bob:  Cmd:GroupInvite:Alice:
-Bob   → Server: Cmd:GroupJoin:Bob:Alice:
-Server → both: Cmd:GroupInfo:GroupAdmin:group_<uuid>;Alice;1;2;0;Alice,1;Bob,1
-Alice → Server: Group:None:Alice:Group:Let's go!
-Server → both: Group:None:Alice:Let's go!
-Bob   → Server: Cmd:GroupDisband:Bob:Group:
-Server → Alice: Group:Bob:left the group
-Server → Alice: Cmd:GroupInfo:GroupAdmin:group_<uuid>;Alice;1;1;0;Alice,1
+Bob   → Server: connect:name=Bob;zone=Dungeon;pass=<JWT>
+Alice → Server: GroupInvite:Alice:Bob:
+Server → Bob:  GroupInvite:Alice:Bob:
+Bob   → Server: GroupJoin:Bob:Alice:
+Server → both: GroupInfo:GroupAdmin::group_<uuid>;Alice;1;2;0;Alice,1;Bob,1
+Alice → Server: Group:Alice::Let's go!
+Server → both: Group:Alice::Let's go!
+Bob   → Server: GroupDisband:Bob::
+Server → Alice: GroupDisbandInfo:Bob::left the group
+Server → Alice: GroupInfo:GroupAdmin::group_<uuid>;Alice;1;1;0;Alice,1
 ```
 
 ## 5. Alive and state updates
@@ -277,14 +272,14 @@ Server → Alice: Cmd:GroupInfo:GroupAdmin:group_<uuid>;Alice;1;1;0;Alice,1
 ### Text message
 
 ```text
-Cmd:Alive:Alice:Group:0.8
+Alive:Alice::0.8
 ```
 
 The server stores the content as a health string, updates the zone from the
 authentication data, and marks the group member online. The group receives:
 
 ```text
-Cmd:AliveInfo:Alice:Dungeon;0.8
+AliveInfo:Alice::Dungeon;0.8
 ```
 
 The text value is neither validated numerically nor converted. Clients can use
@@ -351,14 +346,7 @@ message. The address and certificates must match the installation.
 Browsers respond to WebSocket pings automatically.
 
 ```javascript
-async function startChat(serverUrl, name, zone) {
-  const digest = await crypto.subtle.digest(
-    "SHA-1", new TextEncoder().encode(name)
-  );
-  const pass = Array.from(new Uint8Array(digest), b =>
-    b.toString(16).padStart(2, "0")
-  ).join("");
-
+async function startChat(serverUrl, name, zone, jwt) {
   const ws = new WebSocket(serverUrl);
   ws.binaryType = "arraybuffer";
   ws.addEventListener("message", ({ data }) => {
@@ -366,31 +354,26 @@ async function startChat(serverUrl, name, zone) {
       console.log("Binary group data", data);
       return;
     }
-    // Handle the special departure format before the regular parser.
-    if (/^Group:[^:]+:left the group$/.test(data)) {
-      console.log("Member left", data.split(":")[1]);
-      return;
-    }
     const match = /^([^:]*):([^:]*):([^:]*):([\s\S]*)$/.exec(data);
     if (!match) return;
-    const [, type, command, sender, message] = match;
-    console.log({ type, command, sender, message });
+    const [, type, sender, recipient, message] = match;
+    console.log({ type, sender, recipient, message });
     // For GroupInfo: split message at ';', then read members from field 5 (zero-based).
   });
   ws.addEventListener("open", () => {
-    ws.send(`connect:name=${name};zone=${zone};pass=${pass}`);
+    ws.send(`connect:name=${name};zone=${zone};pass=${jwt}`);
     // Frames are processed in order; there is no authentication ACK.
     ws.send("subscribe:Trade");
-    ws.send(`Channel:None:${name}:World:Hello everyone!`);
+    ws.send(`Channel:${name}:World:Hello everyone!`);
   });
   return ws;
 }
 
-const ws = await startChat("wss://<server>:9020/", "Alice", "Dungeon");
+const ws = await startChat("wss://<server>:9020/", "Alice", "Dungeon", jwtFromGameServer);
 // After the connection opens, for example:
-// ws.send("Tell:None:Alice:Bob:Hello!");
-// ws.send("Cmd:GroupInvite:Alice:Bob:");
-// ws.send("Group:None:Alice:Group:Ready?");
+// ws.send("Tell:Alice:Bob:Hello!");
+// ws.send("GroupInvite:Alice:Bob:");
+// ws.send("Group:Alice::Ready?");
 ```
 
 ## Project sources
