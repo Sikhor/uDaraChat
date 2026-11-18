@@ -47,6 +47,9 @@ class Controller:
         self.logs = {}
         self.ready = {}
         self.threads = []
+        self.send_lock = threading.Lock()
+        self.performance_stop = threading.Event()
+        self.performance_thread = None
         self.group_lock = threading.Lock()
         self.groups = {name: None for name in self.names}
         self.greeted_groups = {}
@@ -162,16 +165,18 @@ class Controller:
             print(f'{name:<12} {state:<9} {display}')
         print('Cached server updates; stopped bots may still belong to their last group.')
 
-    def send(self, name, command):
+    def send(self, name, command, *, paced=True):
         if name not in self.names:
             raise ValueError(f'Unknown bot: {name}')
         proc = self.processes.get(name)
         if proc is None or proc.poll() is not None:
             raise ValueError(f'{name} is stopped; use reconnect {name}')
-        proc.stdin.write(command + '\n')
-        proc.stdin.flush()
+        with self.send_lock:
+            proc.stdin.write(command + '\n')
+            proc.stdin.flush()
         print(f'{name} -> {command}', flush=True)
-        time.sleep(self.args.delay)
+        if paced:
+            time.sleep(self.args.delay)
 
     def stop(self, name):
         proc = self.processes.get(name)
@@ -187,20 +192,70 @@ class Controller:
         proc.stdin.close()
 
     def close(self):
+        self.stop_performance()
         for name in list(self.processes):
             self.stop(name)
         for thread in self.threads:
             thread.join(timeout=3)
 
     def reset(self):
+        self.stop_performance()
         for name in self.names:
             proc = self.processes.get(name)
             if proc and proc.poll() is None:
                 self.send(name, 'leave')
 
+    def stop_performance(self):
+        self.performance_stop.set()
+        if self.performance_thread is not None:
+            self.performance_thread.join()
+            self.performance_thread = None
+
+    def performance_tick(self, tick):
+        messages = (
+            "{name} scouts ahead: dragon tracks by the old watchtower. Bring fire resistance!",
+            "{name} calls for adventurers! The moonlit citadel awaits; healers get first pick of potions!",
+            "{name} spots glowing runes beneath the crypt. Shields up; the next chest might have teeth!",
+            "{name} found a legendary map! Meet at the tavern after we defeat the goblin king.",
+            "{name} announces a rare spawn in the enchanted forest. Ready your bows and save some loot!",
+            "{name} hears the dungeon guardian waking. Mana full, torches lit, onward to glory!",
+        )
+        for index, name in enumerate(self.names):
+            if self.performance_stop.is_set():
+                return
+            proc = self.processes.get(name)
+            if proc is None or proc.poll() is not None:
+                continue
+            route = (tick + index) % 3
+            text = messages[(tick + index) % len(messages)].format(name=name)
+            command = (f'tell {self.args.unreal_character} ' if route == 0 else
+                       'world ' if route == 1 else 'zone Dungeon ')
+            try:
+                self.send(name, command + text, paced=False)
+            except (OSError, ValueError) as error:
+                print(f'Performance send failed for {name}: {error}', flush=True)
+
+    def start_performance(self):
+        self.stop_performance()
+        self.performance_stop.clear()
+
+        def run():
+            tick = 0
+            while not self.performance_stop.wait(1.0):
+                self.performance_tick(tick)
+                tick += 1
+
+        self.performance_thread = threading.Thread(target=run, daemon=True)
+        self.performance_thread.start()
+        print('Performance started: each running bot sends once per second. '
+              'Use reset or another scenario to stop.')
+
     def scenario(self, kind):
-        if kind not in ('bots', 'unreal', 'unreal-led'):
-            raise ValueError('scenario must be bots, unreal, or unreal-led')
+        if kind not in ('bots', 'unreal', 'unreal-led', 'performance'):
+            raise ValueError('scenario must be bots, unreal, unreal-led, or performance')
+        if kind == 'performance':
+            self.start_performance()
+            return
         self.reset()
         leader = self.names[0]
         if kind == 'unreal-led':
@@ -254,6 +309,7 @@ class Controller:
 
 
 HELP = '''Commands:
+  scenario performance each bot sends a tell, World, or Dungeon message every second
   scenario bots        six bots in one group
   scenario unreal      Unreal + five bots; prompts for manual acceptance
   scenario unreal-led  five bots await invitations from Unreal
@@ -262,7 +318,7 @@ HELP = '''Commands:
   leave BOT            remove BOT from its current group
   disconnect BOT       stop a bot to test offline presence
   reconnect BOT        restart a bot with a fresh JWT
-  reset                all running bots leave their groups
+  reset                stop performance; all running bots leave their groups
   groups               show last reported group ID for every bot
   status               show process status (not authenticated/group status)
   quit                 stop all bots and exit

@@ -47,8 +47,16 @@ At the `group-test>` prompt, enter one of:
 scenario bots
 scenario unreal
 scenario unreal-led
+scenario performance
 ```
 
+- `performance`: each running bot sends one game-themed message per second, cycling
+  through a tell to `--unreal-character`, the World channel, and the Dungeon zone.
+  Bots start on staggered message types. The controller prompt remains available;
+  `reset`, another scenario, or quitting stops the traffic. Disconnected bots are
+  skipped and reconnected bots resume automatically. The `--delay` option does not
+  affect this cadence. In Unreal, display World and enter Dungeon to receive zone
+  messages. Existing groups are preserved when performance starts.
 - `bots`: all running bots leave their previous groups, then TestBot01 invites
   TestBot02–06. Bots automatically accept invitations. This fills the six-member
   group. Unreal is outside it and should not receive its private roster updates.
@@ -116,7 +124,8 @@ Stopping bots does not erase their server-side groups: run `reset` while they ar
 connected, and leave the group in Unreal, if you want to clear membership first.
 
 A bot can also be controlled directly using `--mode controlled` with its normal
-`--name` and JWT options. Its stdin accepts `invite NAME`, `kick NAME`, `leave`
+`--name` and JWT options. Its stdin accepts `tell NAME MESSAGE`, `world MESSAGE`, `zone ZONE MESSAGE`,
+`group MESSAGE`, `invite NAME`, `kick NAME`, `leave`
 and `quit`; EOF stops it. Existing bot modes remain available.
 
 ## Verification

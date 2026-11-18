@@ -173,10 +173,17 @@ public:
           message.Recipient = action == "world" ? "World" : "";
           message.Message = command.substr(text);
       }
+      else if ((action == "tell" || action == "zone") && !target.empty()) {
+          std::string text;
+          std::getline(input >> std::ws, text);
+          if (text.empty()) { std::cerr << action << " requires a target and message" << std::endl; return; }
+          message.Type = action == "tell" ? EChatCmdType::Tell : EChatCmdType::Zone;
+          message.Message = text;
+      }
       else if (action == "invite" && !target.empty()) message.Type = EChatCmdType::GroupInvite;
       else if (action == "kick" && !target.empty()) message.Type = EChatCmdType::GroupKick;
       else if (action == "leave") { message.Type = EChatCmdType::GroupDisband; message.Recipient.clear(); }
-      else { std::cerr << "Control command: world <message>, group <message>, invite <name>, kick <name>, leave, admin-status, admin-groups, admin-zones, admin-channels, quit" << std::endl; return; }
+      else { std::cerr << "Control command: tell <name> <message>, zone <zone> <message>, world <message>, group <message>, invite <name>, kick <name>, leave, admin-status, admin-groups, admin-zones, admin-channels, quit" << std::endl; return; }
       const std::string frame = message.Serialize();
       wsclient.send(websocket::OPCODE_TEXT, (const uint8_t*)frame.data(), frame.size());
       std::cout << "CONTROL SENT " << action << " " << target << std::endl;

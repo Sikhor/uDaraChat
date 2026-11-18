@@ -126,6 +126,47 @@ for line in sys.stdin:
         c.observe_group('TestBot01', 'CONTROL SENT leave ')
         self.assertIsNone(c.groups['TestBot01'])
 
+    def test_performance_routes_and_skips_stopped_bots(self):
+        c = self.controller
+        c.start('TestBot01')
+        c.start('TestBot02')
+        c.performance_stop.clear()
+        with patch.object(c, 'send') as send:
+            for tick in range(3):
+                c.performance_tick(tick)
+            self.assertEqual(send.call_count, 6)
+            commands = [call.args[1] for call in send.call_args_list
+                        if call.args[0] == 'TestBot01']
+            self.assertTrue(commands[0].startswith('tell UnrealHero '))
+            self.assertTrue(commands[1].startswith('world '))
+            self.assertTrue(commands[2].startswith('zone Dungeon '))
+            self.assertTrue(all(call.kwargs == {'paced': False}
+                                for call in send.call_args_list))
+            c.performance_stop.set()
+            c.performance_tick(3)
+            self.assertEqual(send.call_count, 6)
+
+    def test_performance_background_lifecycle(self):
+        import threading
+        c = self.controller
+        ticked = threading.Event()
+        with patch.object(c, 'performance_tick', side_effect=lambda tick: ticked.set()) as tick:
+            c.execute('scenario performance')
+            first = c.performance_thread
+            self.assertFalse(ticked.wait(0.1))
+            self.assertTrue(ticked.wait(2))
+            tick.assert_called_once_with(0)
+            c.execute('scenario performance')
+            self.assertFalse(first.is_alive())
+            second = c.performance_thread
+            c.execute('reset')
+            self.assertFalse(second.is_alive())
+            self.assertIsNone(c.performance_thread)
+            c.execute('scenario performance')
+            third = c.performance_thread
+            c.close()
+            self.assertFalse(third.is_alive())
+
     def test_actual_generator_claims(self):
         generator = module.load_generator(ROOT.parent / 'TokenGenerator/token_generator.py')
         import base64
